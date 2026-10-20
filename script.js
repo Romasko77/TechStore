@@ -876,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Періодична перевірка відповідей від Telegram через ваш сервер
         async function checkReplies() {
             try {
-                const response = await fetch(`/api/get-replies/${userId}`)
+                const response = await fetch(`/api/get-replies/${currentUserId}`)
                 const data = await response.json();
 
                 if (data.replies && data.replies.length > 0) {
