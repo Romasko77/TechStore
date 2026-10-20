@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оформлення замовлення — TechStore</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-container">
+            <a href="index.html" class="logo">Tech<span>Store</span></a>
+            <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> Назад до каталогу</a>
+        </div>
+    </header>
+
+    <div class="container checkout-container">
+        <h1 class="checkout-title">Оформлення замовлення</h1>
+
+        <div class="checkout-layout">
+            <!-- Форма замовлення -->
+            <form id="checkout-form" class="checkout-form">
+                <div class="checkout-section">
+                    <h3><i class="fa-solid fa-address-card"></i> Контактні дані</h3>
+                    
+                    <div class="form-group">
+                        <label for="fullname">ПІБ *</label>
+                        <input type="text" id="fullname" name="fullname" placeholder="Ваше ПІБ">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="phone">Номер телефону *</label>
+                            <input type="text" id="phone" name="phone" placeholder="+380 (99) 123-45-67">
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Електронна пошта *</label>
+                            <input type="text" id="email" name="email" placeholder="example@mail.com">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="checkout-section">
+                    <h3><i class="fa-solid fa-truck"></i> Доставка</h3>
+                    
+                    <div class="form-group">
+                        <label for="city">Місто *</label>
+                        <input type="text" id="city" name="city" placeholder="Київ">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="delivery-method">Спосіб доставки *</label>
+                        <select id="delivery-method" name="delivery-method">
+                            <option value="nova-poshta">Нова Пошта (відділення)</option>
+                            <option value="courier">Кур'єрська доставка</option>
+                            <option value="pickup">Самовивіз з магазину</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="address">Відділення або адреса *</label>
+                        <input type="text" id="address" name="address" placeholder="Відділення №1">
+                    </div>
+                </div>
+
+                <div class="checkout-section">
+                    <h3><i class="fa-solid fa-credit-card"></i> Оплата</h3>
+                    
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="payment" value="card" checked>
+                            <span>Оплата карткою на сайті</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="payment" value="postpaid">
+                            <span>Оплата при отриманні</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-order-btn">Підтвердити замовлення</button>
+            </form>
+
+            <!-- Блок зі складом замовлення -->
+            <div class="order-summary">
+                <h3>Ваше замовлення</h3>
+                <div id="order-items-list" class="order-items-list">
+                    <!-- Завантажується через JS -->
+                </div>
+                <div class="order-total-block">
+                    <span>Разом до сплати:</span>
+                    <strong id="order-total-price">0 ₴</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="checkout.js"></script>
+</body>
+</html>

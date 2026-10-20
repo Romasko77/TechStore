@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Авторизація — TechStore</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="auth-page">
+
+    <div class="auth-container">
+        <div class="auth-header">
+            <a href="index.html" class="logo">Tech<span>Store</span></a>
+            <h2>Вхід до кабінету</h2>
+        </div>
+
+        <form id="login-form" class="auth-form">
+            <div class="form-group">
+                <label for="email">Електронна пошта *</label>
+                <input type="email" id="email" placeholder="example@mail.com" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Пароль *</label>
+                <input type="password" id="password" placeholder="••••••••" required>
+            </div>
+
+            <button type="submit" class="auth-submit-btn">Увійти</button>
+        </form>
+
+        <div class="divider">
+            <span>або увійти через</span>
+        </div>
+
+        <div class="social-login">
+            <button type="button" class="google-btn" id="google-login-btn">
+                <i class="fa-brands fa-google"></i> Google
+            </button>
+        </div>
+
+        <div class="auth-footer">
+            <a href="index.html" class="back-to-home"><i class="fa-solid fa-arrow-left"></i> На головну</a>
+        </div>
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>

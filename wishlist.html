@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Список бажань — TechStore</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-container">
+            <a href="index.html" class="logo">Tech<span>Store</span></a>
+            <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> До каталогу</a>
+        </div>
+    </header>
+
+    <div class="container wishlist-container">
+        <h1 class="wishlist-title"><i class="fa-regular fa-heart"></i> Список бажань</h1>
+
+        <div class="wishlist-grid" id="wishlist-grid">
+            <!-- Товари з обраного завантажаться через JS -->
+        </div>
+
+        <div id="no-wishlist" class="no-products" style="display: none;">
+            <i class="fa-regular fa-heart-crack"></i>
+            <p>Ваш список бажань порожній.</p>
+            <a href="index.html" class="banner-btn" style="display: inline-block; margin-top: 15px;">Перейти до покупок</a>
+        </div>
+    </div>
+
+    <script src="wishlist.js"></script>
+</body>
+</html>

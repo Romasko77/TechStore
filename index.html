@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechStore - Магазин комп'ютерної техніки</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Шапка сайту -->
+    <header class="header">
+        <div class="container header-container">
+            <a href="index.html" class="logo">Tech<span>Store</span></a>
+            
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Я шукаю... (наприклад, RTX 4070)" autocomplete="off">
+                <button type="button" id="search-btn"><i class="fa-solid fa-magnifying-glass"></i> Знайти</button>
+                <div id="search-results" class="search-results"></div>
+            </div>
+
+           <div class="user-actions">
+    <div class="user-block" id="user-block" style="display: flex; align-items: center; gap: 8px;">
+        <a href="login.html" class="action-btn" id="user-btn">
+            <i class="fa-regular fa-user"></i>
+            <span id="user-name-display">Увійти</span>
+        </a>
+        <button type="button" id="logout-btn" title="Вийти" style="display: none; background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 14px;">
+            <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+    </div>
+
+    <a href="wishlist.html" class="action-btn" id="wishlist-btn">
+        <i class="fa-regular fa-heart"></i>
+        <span>Обране</span>
+        <span class="badge" id="wishlist-count">0</span>
+    </a>
+    <button class="action-btn cart-btn" id="open-cart-btn">
+        <i class="fa-solid fa-cart-shopping"></i>
+        <span>Кошик</span>
+        <span class="badge" id="cart-count">0</span>
+    </button>
+</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Блок Hero / Банер -->
+        <section class="hero-banner">
+            <div class="banner-content">
+                <p>Оновлюй свій ПК з новими відеокартами RTX 40-серії та отримуй знижки до -20%</p>
+                <a href="#catalog" class="banner-btn">Дивитися каталог</a>
+            </div>
+        </section>
+
+        <!-- Популярні товари -->
+        <section class="top-sales-section">
+            <h2 class="section-title">Популярні товари тижня</h2>
+            <div class="top-sales-grid">
+                <div class="product-card" data-id="top-1" data-category="laptops" data-price="54999">
+                    <button class="like-btn" data-id="top-1" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                    <div class="product-badge">Хіт</div>
+                    <img src="https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=400" alt="Ноутбук">
+                    <h3 class="product-title">Ігровий ноутбук ASUS ROG Strix G16</h3>
+                    <p class="product-specs">16" IPS / Intel i7 / RAM 16 ГБ / RTX 4060</p>
+                    <div class="product-price-block">
+                        <span class="price">54 999 ₴</span>
+                        <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                    </div>
+                </div>
+                <div class="product-card" data-id="top-2" data-category="monitors" data-price="9899">
+                    <button class="like-btn" data-id="top-2" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                    <div class="product-badge sale">-10%</div>
+                    <img src="https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400" alt="Монітор">
+                    <h3 class="product-title">Монітор 27" Samsung Odyssey G5</h3>
+                    <p class="product-specs">2K / VA / 165Hz / 1 мс</p>
+                    <div class="product-price-block">
+                        <span class="price current-price">9 899 ₴</span>
+                        <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Основна область -->
+        <div class="main-layout" id="catalog">
+            
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <h3 class="filter-title">Фільтри</h3>
+
+                <div class="filter-group">
+                    <label class="filter-label">Категорії</label>
+                    <div class="checkbox-list">
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="laptops" checked> Ноутбуки</label>
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="gpu" checked> Відеокарти</label>
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="monitors" checked> Монітори</label>
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="keyboards" checked> Клавіатури</label>
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="mice" checked> Комп'ютерні мишки</label>
+                        <label class="checkbox-item"><input type="checkbox" class="category-checkbox" value="headphones" checked> Навушники</label>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">Ціна (₴)</label>
+                    <div class="price-inputs">
+                        <input type="number" id="price-min" placeholder="Від" value="1000">
+                        <span>до</span>
+                        <input type="number" id="price-max" placeholder="До" value="100000">
+                        <button id="apply-filters-btn" class="price-btn">OK</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Основний каталог -->
+            <main class="catalog">
+                <div class="catalog-header">
+                    <h2 class="section-title">Всі товари</h2>
+                    
+                    <div class="sort-block">
+                        <label for="sort-select">Сортування:</label>
+                        <select id="sort-select">
+                            <option value="default">За замовчуванням</option>
+                            <option value="price-asc">Від дешевих до дорогих</option>
+                            <option value="price-desc">Від дорогих до дешевих</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="product-grid" id="product-grid">
+                    <div class="product-card" data-id="1" data-category="laptops" data-price="54999">
+                        <button class="like-btn" data-id="1" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge">Топ продажів</div>
+                        <img src="https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=400" alt="Ігровий ноутбук ASUS">
+                        <h3 class="product-title">Ігровий ноутбук ASUS ROG Strix G16</h3>
+                        <p class="product-specs">16" IPS / Intel Core i7-13650HX / RAM 16 ГБ / SSD 1 ТБ / RTX 4060</p>
+                        <div class="product-price-block">
+                            <span class="price">54 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="2" data-category="gpu" data-price="28499">
+                        <button class="like-btn" data-id="2" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://files.catbox.moe/ebyq8f.webp?w=400" alt="Відеокарта RTX 4070">
+                        <h3 class="product-title">Відеокарта Gigabyte GeForce RTX 4070 WINDFORCE</h3>
+                        <p class="product-specs">12 ГБ GDDR6X / 192 bit / PCI-Express 4.0</p>
+                        <div class="product-price-block">
+                            <span class="price">28 499 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="3" data-category="monitors" data-price="9899">
+                        <button class="like-btn" data-id="3" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge sale">-10%</div>
+                        <img src="https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400" alt="Монітор Samsung">
+                        <h3 class="product-title">Монітор 27" Samsung Odyssey G5 QHD</h3>
+                        <p class="product-specs">2560x1440 (2K) / VA / 165Hz / 1 мс / DisplayPort, HDMI</p>
+                        <div class="product-price-block">
+                            <div>
+                                <span class="price old-price">10 999 ₴</span>
+                                <span class="price current-price">9 899 ₴</span>
+                            </div>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="4" data-category="keyboards" data-price="3999">
+                        <button class="like-btn" data-id="4" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=400" alt="Клавіатура">
+                        <h3 class="product-title">Клавіатура механічна HyperX Alloy Origins</h3>
+                        <p class="product-specs">RGB підсвічування / Перемикачі HyperX Red / Дротова</p>
+                        <div class="product-price-block">
+                            <span class="price">3 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="5" data-category="mice" data-price="6299">
+                        <button class="like-btn" data-id="5" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge">Новинка</div>
+                        <img src="https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=400" alt="Миша Razer">
+                        <h3 class="product-title">Миша бездротова Razer DeathAdder V3 Pro</h3>
+                        <p class="product-specs">Focus Pro 30K / 63 г / До 90 годин роботи / Чорна</p>
+                        <div class="product-price-block">
+                            <span class="price">6 299 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="6" data-category="headphones" data-price="8199">
+                        <button class="like-btn" data-id="6" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=400" alt="Навушники">
+                        <h3 class="product-title">Навушники Logitech G PRO X Wireless</h3>
+                        <p class="product-specs">7.1 Surround / Мікрофон BLUE VO!CE / Бездротові 2.4 GHz</p>
+                        <div class="product-price-block">
+                            <span class="price">8 199 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="7" data-category="laptops" data-price="42999">
+                        <button class="like-btn" data-id="7" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1593642632823-8f785ba67e45?w=400" alt="Ноутбук Dell">
+                        <h3 class="product-title">Ноутбук Dell XPS 13</h3>
+                        <p class="product-specs">13.4" FHD+ IPS / Intel Core i5-1340P / RAM 16 ГБ / SSD 512 ГБ</p>
+                        <div class="product-price-block">
+                            <span class="price">42 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="8" data-category="gpu" data-price="13499">
+                        <button class="like-btn" data-id="8" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge sale">-15%</div>
+                        <img src="https://files.catbox.moe/6kn2ov.webp?w=400" alt="Відеокарта RTX 3060">
+                        <h3 class="product-title">Відеокарта MSI GeForce RTX 3060 Ventus 2X</h3>
+                        <p class="product-specs">12 ГБ GDDR6 / 192 bit / PCI-Express 4.0</p>
+                        <div class="product-price-block">
+                            <span class="price">13 499 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="9" data-category="monitors" data-price="16999">
+                        <button class="like-btn" data-id="9" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge">Хіт</div>
+                        <img src="https://images.unsplash.com/photo-1585792180666-f7347c490ee2?w=400" alt="Монітор LG">
+                        <h3 class="product-title">Монітор 31.5" LG UltraGear Nano IPS</h3>
+                        <p class="product-specs">2560x1440 / Nano IPS / 180Hz / G-Sync Compatible</p>
+                        <div class="product-price-block">
+                            <span class="price">16 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="10" data-category="keyboards" data-price="2199">
+                        <button class="like-btn" data-id="10" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400" alt="Клавіатура Keychron">
+                        <h3 class="product-title">Механічна клавіатура Keychron C1</h3>
+                        <p class="product-specs">TKL 87 клавіш / Gateron Red switches / Type-C</p>
+                        <div class="product-price-block">
+                            <span class="price">2 199 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="11" data-category="mice" data-price="1499">
+                        <button class="like-btn" data-id="11" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400" alt="Миша Logitech">
+                        <h3 class="product-title">Ігрова миша Logitech G102 Lightsync</h3>
+                        <p class="product-specs">8000 DPI / RGB підсвічування / 6 кнопок / Біла</p>
+                        <div class="product-price-block">
+                            <span class="price">1 499 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="12" data-category="headphones" data-price="3299">
+                        <button class="like-btn" data-id="12" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge">Новинка</div>
+                        <img src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400" alt="Гарнітура HyperX">
+                        <h3 class="product-title">Гарнітура HyperX Cloud II Red</h3>
+                        <p class="product-specs">7.1 Virtual Surround / Драйвери 53 мм / Знімний мікрофон</p>
+                        <div class="product-price-block">
+                            <span class="price">3 299 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="13" data-category="gpu" data-price="78999">
+                        <button class="like-btn" data-id="13" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge">Топ</div>
+                        <img src="https://files.catbox.moe/ktzczf.webp?w=400" alt="Відеокарта RTX 4090">
+                        <h3 class="product-title">Відеокарта ASUS ROG Strix GeForce RTX 4090</h3>
+                        <p class="product-specs">24 ГБ GDDR6X / 384 bit / DLSS 3</p>
+                        <div class="product-price-block">
+                            <span class="price">78 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="14" data-category="laptops" data-price="29999">
+                        <button class="like-btn" data-id="14" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=400" alt="Ноутбук Lenovo">
+                        <h3 class="product-title">Ноутбук Lenovo IdeaPad Gaming 3</h3>
+                        <p class="product-specs">15.6" 120Hz / AMD Ryzen 5 5600H / RAM 16 ГБ / GTX 1650</p>
+                        <div class="product-price-block">
+                            <span class="price">29 999 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="15" data-category="keyboards" data-price="7499">
+                        <button class="like-btn" data-id="15" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <img src="https://images.unsplash.com/photo-1595225476474-87563907a212?w=400" alt="Клавіатура SteelSeries">
+                        <h3 class="product-title">Клавіатура SteelSeries Apex Pro TKL</h3>
+                        <p class="product-specs">OmniPoint перемикачі / OLED-дисплей / Магнітна підставка</p>
+                        <div class="product-price-block">
+                            <span class="price">7 499 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+
+                    <div class="product-card" data-id="16" data-category="mice" data-price="3899">
+                        <button class="like-btn" data-id="16" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
+                        <div class="product-badge sale">-5%</div>
+                        <img src="https://files.catbox.moe/9fj9bo.jpg?w=400" alt="Миша SteelSeries">
+                        <h3 class="product-title">Бездротова миша SteelSeries Aerox 3 Wireless</h3>
+                        <p class="product-specs">Ультралегка 68 г / Захист IP54 / RGB підсвічування</p>
+                        <div class="product-price-block">
+                            <span class="price">3 899 ₴</span>
+                            <button class="buy-btn add-to-cart-btn"><i class="fa-solid fa-cart-shopping"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="no-products" class="no-products" style="display: none;">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                    <p>За вашим запитом товарів не знайдено. Спробуйте змінити фільтри.</p>
+                </div>
+            </main>
+
+        </div>
+    </div>
+
+    <!-- Модальне вікно кошика -->
+    <div class="cart-modal-overlay" id="cart-modal">
+        <div class="cart-modal">
+            <div class="cart-modal-header">
+                <h3><i class="fa-solid fa-cart-shopping"></i> Ваш кошик</h3>
+                <button class="close-modal-btn" id="close-cart-btn">&times;</button>
+            </div>
+            
+            <div class="cart-modal-body" id="cart-items-container"></div>
+
+            <div class="cart-modal-footer">
+                <div class="cart-total">
+                    <span>Разом:</span>
+                    <strong id="cart-total-price">0 ₴</strong>
+                </div>
+                <button class="checkout-btn">Оформити замовлення</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальне вікно детальної інформації про товар -->
+    <div class="product-modal-overlay" id="product-modal">
+        <div class="product-modal">
+            <button class="close-modal-btn" id="close-product-modal">&times;</button>
+            
+            <div class="product-modal-content">
+                <div class="product-modal-gallery">
+                    <img id="modal-product-img" src="" alt="Товар">
+                </div>
+                <div class="product-modal-info">
+                    <h2 id="modal-product-title">Назва товару</h2>
+                    <div class="modal-product-status">
+                        <span class="stock-status"><i class="fa-solid fa-check"></i> В наявності</span>
+                    </div>
+                    <!-- Вибір пам'яті -->
+                    <div class="option-group" id="modal-memory-group">
+                        <label class="option-label">Вбудована пам'ять:</label>
+                        <div class="options-list memory-options" id="modal-memory-list"></div>
+                    </div>
+
+                    <!-- Короткі характеристики -->
+                    <p class="modal-product-specs" id="modal-product-specs">Короткі характеристики...</p>
+                    
+                    <!-- Детальні характеристики -->
+                    <div class="tech-specs-block">
+                        <h4>Характеристики:</h4>
+                        <ul class="tech-specs-list" id="modal-tech-specs"></ul>
+                    </div>
+
+                    <div class="modal-product-price-block">
+                        <span class="modal-price" id="modal-product-price">0 ₴</span>
+                        <button class="buy-btn main-buy-btn" id="modal-add-to-cart-btn">
+                            <i class="fa-solid fa-cart-shopping"></i> Купити
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Блок "Подивіться ще" (Схожі товари) -->
+            <div class="similar-products-section">
+                <h3 class="similar-title">Подивіться ще</h3>
+                <div class="similar-products-grid" id="modal-similar-products"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Віджет онлайн-чату -->
+    <div id="chat-widget" class="chat-widget">
+        <button id="chat-toggle-btn" class="chat-toggle-btn" title="Онлайн-чат">
+            <i class="fa-solid fa-comments"></i>
+        </button>
+        
+        <div id="chat-box" class="chat-box hidden">
+            <div class="chat-header">
+                <span>TechStore Бот</span>
+                <button id="chat-close-btn" class="close-chat-btn">&times;</button>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-msg system">Доброго дня! Чим можу допомогти?</div>
+            </div>
+            <form id="chat-form" class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Напишіть повідомлення..." required autocomplete="off">
+                <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
