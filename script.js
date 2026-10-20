@@ -315,66 +315,79 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         });
 
-        html += `
-            </div>
-            <div style="background:#f1f2f6; padding:12px; border-radius:8px;">
-                <h5 style="margin:0 0 8px 0; font-size:14px;">Залишити відгук</h5>
-                <div style="display:flex; gap:5px; margin-bottom:8px; cursor:pointer;" id="star-rating-select">
-                    <span data-star="1" style="font-size:18px; color:#f39c12;">★</span>
-                    <span data-star="2" style="font-size:18px; color:#f39c12;">★</span>
-                    <span data-star="3" style="font-size:18px; color:#f39c12;">★</span>
-                    <span data-star="4" style="font-size:18px; color:#f39c12;">★</span>
-                    <span data-star="5" style="font-size:18px; color:#f39c12;">★</span>
+        html += `</div>`;
+
+        // Перевірка чи користувач авторизований
+        const currentUser = localStorage.getItem('techstore_user');
+
+        if (!currentUser) {
+            html += `
+                <div style="background:#fff3cd; padding:12px; border-radius:8px; text-align:center; font-size:13px; color:#856404;">
+                    🔒 Щоб залишити відгук, будь ласка, <a href="login.html" style="color:#856404; font-weight:bold; text-decoration:underline;">увійдіть в акаунт</a>.
                 </div>
-                <input type="text" id="review-user-name" placeholder="Ваше ім'я" value="${activeUser || ''}" style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ccc; border-radius:4px; font-size:12px; box-sizing:border-box;">
-                <textarea id="review-user-text" placeholder="Напишіть свій відгук..." style="width:100%; padding:6px; height:50px; border:1px solid #ccc; border-radius:4px; font-size:12px; resize:none; box-sizing:border-box;"></textarea>
-                <button id="submit-review-btn" style="margin-top:6px; background:#2ecc71; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-size:12px; width:100%;">Надіслати відгук</button>
-            </div>
-        `;
+            `;
+        } else {
+            html += `
+                <div style="background:#f1f2f6; padding:12px; border-radius:8px;">
+                    <h5 style="margin:0 0 8px 0; font-size:14px;">Залишити відгук</h5>
+                    <div style="display:flex; gap:5px; margin-bottom:8px; cursor:pointer;" id="star-rating-select">
+                        <span data-star="1" style="font-size:18px; color:#f39c12;">★</span>
+                        <span data-star="2" style="font-size:18px; color:#f39c12;">★</span>
+                        <span data-star="3" style="font-size:18px; color:#f39c12;">★</span>
+                        <span data-star="4" style="font-size:18px; color:#f39c12;">★</span>
+                        <span data-star="5" style="font-size:18px; color:#f39c12;">★</span>
+                    </div>
+                    <input type="text" id="review-user-name" value="${currentUser}" readonly style="width:100%; padding:6px; margin-bottom:6px; border:1px solid #ccc; border-radius:4px; font-size:12px; box-sizing:border-box; background:#e9ecef; color:#555;">
+                    <textarea id="review-user-text" placeholder="Напишіть свій відгук..." style="width:100%; padding:6px; height:50px; border:1px solid #ccc; border-radius:4px; font-size:12px; resize:none; box-sizing:border-box;"></textarea>
+                    <button id="submit-review-btn" style="margin-top:6px; background:#2ecc71; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-size:12px; width:100%;">Надіслати відгук</button>
+                </div>
+            `;
+        }
 
         reviewsContainer.innerHTML = html;
 
-        currentRating = 5;
-        const starSpans = reviewsContainer.querySelectorAll('#star-rating-select span');
-        starSpans.forEach(span => {
-            span.addEventListener('click', (e) => {
-                currentRating = parseInt(e.target.dataset.star);
-                starSpans.forEach((s, idx) => {
-                    s.style.color = idx < currentRating ? '#f39c12' : '#ccc';
+        if (currentUser) {
+            currentRating = 5;
+            const starSpans = reviewsContainer.querySelectorAll('#star-rating-select span');
+            starSpans.forEach(span => {
+                span.addEventListener('click', (e) => {
+                    currentRating = parseInt(e.target.dataset.star);
+                    starSpans.forEach((s, idx) => {
+                        s.style.color = idx < currentRating ? '#f39c12' : '#ccc';
+                    });
                 });
             });
-        });
 
-        const submitBtn = document.getElementById('submit-review-btn');
-        if (submitBtn) {
-            submitBtn.onclick = () => {
-                const nameInput = document.getElementById('review-user-name').value.trim();
-                const textInput = document.getElementById('review-user-text').value.trim();
+            const submitBtn = document.getElementById('submit-review-btn');
+            if (submitBtn) {
+                submitBtn.onclick = () => {
+                    const textInput = document.getElementById('review-user-text').value.trim();
 
-                if (!nameInput || !textInput) {
-                    showNotification('Будь ласка, заповніть всі поля!');
-                    return;
-                }
+                    if (!textInput) {
+                        showNotification('Будь ласка, напишіть текст відгуку!');
+                        return;
+                    }
 
-                const today = new Date();
-                const dateStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+                    const today = new Date();
+                    const dateStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
 
-                const newReview = {
-                    name: nameInput,
-                    rating: currentRating,
-                    text: textInput,
-                    date: dateStr
+                    const newReview = {
+                        name: currentUser,
+                        rating: currentRating,
+                        text: textInput,
+                        date: dateStr
+                    };
+
+                    if (!reviewsData[productId]) {
+                        reviewsData[productId] = [...productReviews];
+                    }
+
+                    reviewsData[productId].unshift(newReview);
+                    localStorage.setItem('techstore_reviews', JSON.stringify(reviewsData));
+                    renderReviews(productId);
+                    showNotification('Дякуємо за ваш відгук!');
                 };
-
-                if (!reviewsData[productId]) {
-                    reviewsData[productId] = [...productReviews];
-                }
-
-                reviewsData[productId].unshift(newReview);
-                localStorage.setItem('techstore_reviews', JSON.stringify(reviewsData));
-                renderReviews(productId);
-                showNotification('Дякуємо за ваш відгук!');
-            };
+            }
         }
     }
 
