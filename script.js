@@ -859,7 +859,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) {}
 
             try {
-                await fetch('http://localhost:3000/api/message', {
+               await fetch('/api/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
