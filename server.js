@@ -1,10 +1,18 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config(); // Підключаємо завантаження змінних середовища з .env файлу
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// === РОЗДАЧА СТАТИЧНИХ ФАЙЛІВ ТА ГОЛОВНОЇ СТОРІНКИ ===
+app.use(express.static(__dirname));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // === НАЛАШТУВАННЯ TELEGRAM (змінні беруться з .env) ===
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
