@@ -3,9 +3,16 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config(); // Підключаємо завантаження змінних середовища з .env файлу
 
+// Імпортуємо офіційну бібліотеку Google Gen AI
+const { GoogleGenAI } = require('@google/genai');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// === ІНІЦІАЛІЗАЦІЯ GEMINI AI ===
+// Автоматично використовує GEMINI_API_KEY з файлу .env
+const ai = new GoogleGenAI();
 
 // === РОЗДАЧА СТАТИЧНИХ ФАЙЛІВ ТА ГОЛОВНОЇ СТОРІНКИ ===
 app.use(express.static(__dirname));
@@ -34,7 +41,19 @@ async function telegramRequest(method, data) {
     return await response.json();
 }
 
-// 1. Отримання повідомлення з сайту та відправка в Telegram
+// Допоміжна функція для відправки сповіщень адміністратору в Telegram, коли потрібен менеджер
+async function sendToTelegramAdmin(userId, userName, text) {
+    if (!adminChatId || !TELEGRAM_BOT_TOKEN) return;
+    const alertMessage = `⚠️ *УВАГА! Потрібне втручання менеджера!*\n👤 *Користувач:* ${userName || 'Гість'}\n🆔 *User ID:* \`${userId}\`\n💬 *Запит клієнта:* ${text}\n\n_(Бот не зміг відповісти або спрацював запит менеджера)_`;
+    
+    await telegramRequest('sendMessage', {
+        chat_id: adminChatId,
+        text: alertMessage,
+        parse_mode: 'Markdown'
+    });
+}
+
+// 1. Отримання повідомлення з сайту (ОБРОБКА ЧЕРЕЗ GEMINI AI)
 app.post('/api/message', async (req, res) => {
     const { userId, userName, text } = req.body;
 
@@ -42,29 +61,73 @@ app.post('/api/message', async (req, res) => {
         return res.status(400).json({ error: 'Відсутні обов\'язкові поля' });
     }
 
-    // Формуємо текст повідомлення
-    const messageToTelegram = `📩 *Нове повідомлення з сайту!*\n👤 *Користувач:* ${userName}\n🆔 *User ID:* \`${userId}\`\n💬 *Повідомлення:* ${text}`;
-
     try {
-        const result = await telegramRequest('sendMessage', {
-            chat_id: adminChatId,
-            text: messageToTelegram,
-            parse_mode: 'Markdown'
+        // Запит до моделі Gemini з чіткими правилами поведінки
+        const aiResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: text,
+            config: {
+                systemInstruction: `Ти — розумний і ввічливий бот-консультант інтернет-магазину комп'ютерної техніки "TechStore". 
+                Твоє завдання — допомагати покупцям з вибором техніки, консультувати щодо характеристик, доставки, оплати та гарантії.
+                Дотримуйся таких правил:
+                1. Якщо питання стосується техніки, комп'ютерів, комплектуючих, характеристик, магазину, замовлень, доставки чи гарантії — відповідай корисно, ввічливо та чітко українською мовою.
+                2. Якщо питання НЕ стосується тематики магазину (наприклад, політика, рецепти, погода, сторонні теми тощо), відповідай чітко і без зайвих слів цим текстом: "Вибачте, але це питання не стосується тематики нашого магазину TechStore."
+                3. Якщо питання занадто складне, вимагає персональної допомоги або ти не знаєш на нього точної відповіді, напиши у тексті відповіді маркер "NEED_MANAGER".`
+            }
         });
 
-        if (result.ok) {
-            messageToUserMap.set(result.result.message_id, userId);
-            res.json({ status: 'ok' });
-        } else {
-            throw new Error(result.description);
+        let botReply = aiResponse.text.trim();
+        let finalMessageForUser = botReply;
+        let needsManager = false;
+
+        // Перевіряємо, чи повернув ШІ маркер необхідності менеджера
+        if (botReply.includes("NEED_MANAGER")) {
+            needsManager = true;
+            finalMessageForUser = "Дякуємо за запитання! Ваше повідомлення передано менеджеру, і він зв'яжеться з вами найближчим часом.";
+            
+            // Відправляємо сповіщення адміністратору в Telegram
+            await sendToTelegramAdmin(userId, userName, text);
         }
+
+        // Зберігаємо відповідь бота у масив для відправки у віджет користувача
+        if (!pendingReplies.has(userId)) {
+            pendingReplies.set(userId, []);
+        }
+        pendingReplies.get(userId).push(finalMessageForUser);
+
+        // Також дублюємо оригінальне повідомлення користувача в адмін-чат Telegram (якщо це звичайне звернення або передано менеджеру)
+        if (needsManager || !botReply.includes("не стосується тематики")) {
+            const messageToTelegram = `📩 *Повідомлення з сайту (AI Бот)*\n👤 *Користувач:* ${userName || 'Гість'}\n🆔 *User ID:* \`${userId}\`\n💬 *Повідомлення:* ${text}\n🤖 *Відповідь бота:* ${finalMessageForUser}`;
+            
+            const result = await telegramRequest('sendMessage', {
+                chat_id: adminChatId,
+                text: messageToTelegram,
+                parse_mode: 'Markdown'
+            });
+
+            if (result.ok) {
+                messageToUserMap.set(result.result.message_id, userId);
+            }
+        }
+
+        res.json({ success: true, reply: finalMessageForUser });
+
     } catch (err) {
-        console.error('Помилка надсилання в Telegram:', err.message);
-        res.status(500).json({ error: err.message });
+        console.error('Помилка обробки повідомлення ШІ:', err.message);
+        
+        // Резервний варіант, якщо сталася помилка з API Gemini
+        const fallbackReply = "Вибачте, наразі сталася технічна помилка. Ваше повідомлення передано менеджеру.";
+        if (!pendingReplies.has(userId)) {
+            pendingReplies.set(userId, []);
+        }
+        pendingReplies.get(userId).push(fallbackReply);
+        await sendToTelegramAdmin(userId, userName, text);
+
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
-// 2. Long-polling для отримання відповідей з Telegram
+// 2. Long-polling для отримання відповідей з Telegram (коли менеджер відповідає вручну)
 let lastUpdateId = 0;
 async function pollTelegramUpdates() {
     try {
@@ -99,13 +162,13 @@ async function pollTelegramUpdates() {
                     }
                 }
 
-                // Збереження відповіді
+                // Збереження відповіді менеджера для клієнта
                 if (targetUserId) {
                     if (!pendingReplies.has(targetUserId)) {
                         pendingReplies.set(targetUserId, []);
                     }
-                    pendingReplies.get(targetUserId).push(replyText);
-                    console.log(`✅ [УСПІХ] Відповідь збережено для ${targetUserId}: ${replyText}`);
+                    pendingReplies.get(targetUserId).push(`Менеджер: ${replyText}`);
+                    console.log(`✅ [УСПІХ] Відповідь менеджера збережено для ${targetUserId}: ${replyText}`);
                 } else if (msg.reply_to_message) {
                     console.log('⚠️ [ПОМИЛКА] Не вдалося визначити ID. Використайте команду: /r <userId> <текст>');
                 }
