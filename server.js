@@ -64,7 +64,7 @@ app.post('/api/message', async (req, res) => {
     try {
         // Запит до моделі Gemini з чіткими правилами поведінки
         const aiResponse = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-3.8-flash',
             contents: text,
             config: {
                 systemInstruction: `Ти — розумний і ввічливий бот-консультант інтернет-магазину комп'ютерної техніки "TechStore". 
