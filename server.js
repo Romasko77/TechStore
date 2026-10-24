@@ -53,6 +53,23 @@ async function sendToTelegramAdmin(userId, userName, text) {
     });
 }
 
+// Допоміжна функція для автоматичного повтору запиту при помилці 503 / High Demand
+async function generateWithRetry(ai, model, contents, config, retries = 3, delay = 2000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await ai.models.generateContent({ model, contents, config });
+        } catch (err) {
+            const isUnavailable = err.message && (err.message.includes('503') || err.message.includes('UNAVAILABLE') || err.message.includes('high demand'));
+            if (isUnavailable && i < retries - 1) {
+                console.log(`⚠️ Сервери Google перевантажені (503). Спроба ${i + 1} з ${retries}. Чекаємо ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            throw err;
+        }
+    }
+}
+
 // 1. Отримання повідомлення з сайту (ОБРОБКА ЧЕРЕЗ GEMINI AI)
 app.post('/api/message', async (req, res) => {
     const { userId, userName, text } = req.body;
@@ -62,18 +79,14 @@ app.post('/api/message', async (req, res) => {
     }
 
     try {
-        // Запит до моделі Gemini з чіткими правилами поведінки
-        const aiResponse = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
-            contents: text,
-            config: {
-                systemInstruction: `Ти — розумний і ввічливий бот-консультант інтернет-магазину комп'ютерної техніки "TechStore". 
-                Твоє завдання — допомагати покупцям з вибором техніки, консультувати щодо характеристик, доставки, оплати та гарантії.
-                Дотримуйся таких правил:
-                1. Якщо питання стосується техніки, комп'ютерів, комплектуючих, характеристик, магазину, замовлень, доставки чи гарантії — відповідай корисно, ввічливо та чітко українською мовою.
-                2. Якщо питання НЕ стосується тематики магазину (наприклад, політика, рецепти, погода, сторонні теми тощо), відповідай чітко і без зайвих слів цим текстом: "Вибачте, але це питання не стосується тематики нашого магазину TechStore."
-                3. Якщо питання занадто складне, вимагає персональної допомоги або ти не знаєш на нього точної відповіді, напиши у тексті відповіді маркер "NEED_MANAGER".`
-            }
+        // Виклик генерації з підтримкою авто-повтору (retry)
+        const aiResponse = await generateWithRetry(ai, 'gemini-3.8-flash', text, {
+            systemInstruction: `Ти — розумний і ввічливий бот-консультант інтернет-магазину комп'ютерної техніки "TechStore". 
+            Твоє завдання — допомагати покупцям з вибором техніки, консультувати щодо характеристик, доставки, оплати та гарантії.
+            Дотримуйся таких правил:
+            1. Якщо питання стосується техніки, комп'ютерів, комплектуючих, характеристик, магазину, замовлень, доставки чи гарантії — відповідай корисно, ввічливо та чітко українською мовою.
+            2. Якщо питання НЕ стосується тематики магазину (наприклад, політика, рецепти, погода, сторонні теми тощо), відповідай чітко і без зайвих слів цим текстом: "Вибачте, але це питання не стосується тематики нашого магазину TechStore."
+            3. Якщо питання занадто складне, вимагає персональної допомоги або ти не знаєш на нього точної відповіді, напиши у тексті відповіді маркер "NEED_MANAGER".`
         });
 
         let botReply = aiResponse.text.trim();
@@ -95,7 +108,7 @@ app.post('/api/message', async (req, res) => {
         }
         pendingReplies.get(userId).push(finalMessageForUser);
 
-        // Також дублюємо оригінальне повідомлення користувача в адмін-чат Telegram (якщо це звичайне звернення або передано менеджеру)
+        // Дублюємо оригінальне повідомлення користувача в адмін-чат Telegram
         if (needsManager || !botReply.includes("не стосується тематики")) {
             const messageToTelegram = `📩 *Повідомлення з сайту (AI Бот)*\n👤 *Користувач:* ${userName || 'Гість'}\n🆔 *User ID:* \`${userId}\`\n💬 *Повідомлення:* ${text}\n🤖 *Відповідь бота:* ${finalMessageForUser}`;
             
@@ -115,7 +128,7 @@ app.post('/api/message', async (req, res) => {
     } catch (err) {
         console.error('Помилка обробки повідомлення ШІ:', err.message);
         
-        // Резервний варіант, якщо сталася помилка з API Gemini
+        // Резервний варіант, якщо всі спроби вичерпано або сталася інша критична помилка
         const fallbackReply = "Вибачте, наразі сталася технічна помилка. Ваше повідомлення передано менеджеру.";
         if (!pendingReplies.has(userId)) {
             pendingReplies.set(userId, []);
@@ -151,7 +164,7 @@ async function pollTelegramUpdates() {
                     }
                 }
 
-                // СПОСІБ 2: Відповідь через Reply (якщо є в пам'яті або в тексті)
+                // СПОСІБ 2: Відповідь через Reply на повідомлення в Telegram
                 if (!targetUserId && msg.reply_to_message) {
                     const replyToId = msg.reply_to_message.message_id;
                     targetUserId = messageToUserMap.get(replyToId);
