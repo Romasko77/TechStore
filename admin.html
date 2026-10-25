@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>TechStore: керування товарами</title>
+<style>
+:root { --green:#27ae60; --ink:#1d2321; --muted:#6b7570; --bg:#f3f5f4; --line:#dde2df; --red:#c0392b; --warn:#fff6dc; }
+* { box-sizing: border-box; }
+body { margin:0; font:15px/1.45 "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+header { background:var(--ink); color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+header h1 { margin:0; font-size:18px; }
+header h1 span { color:#2ecc71; }
+main { max-width:1280px; margin:0 auto; padding:24px; }
+.hidden { display:none !important; }
+input, select, textarea, button { font:inherit; }
+input, select, textarea { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline:2px solid var(--green); outline-offset:1px; }
+button { padding:8px 14px; border:0; border-radius:6px; background:var(--green); color:#fff; cursor:pointer; font-weight:600; }
+button.ghost { background:transparent; color:#fff; border:1px solid #ffffff55; }
+button.danger { background:#fff; color:var(--red); border:1px solid var(--red); }
+button:disabled { opacity:.5; cursor:wait; }
+.login { max-width:340px; margin:12vh auto; background:#fff; padding:28px; border-radius:10px; border:1px solid var(--line); }
+.login h2 { margin:0 0 16px; }
+.err { color:var(--red); min-height:20px; margin:8px 0 0; }
+.panel { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:20px; }
+.panel h2 { margin:0 0 12px; font-size:17px; }
+.add-grid { display:grid; grid-template-columns:2fr 1.2fr 1fr; gap:10px; }
+.add-grid .wide { grid-column:1 / -1; }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:3px; }
+.toolbar { display:flex; gap:12px; align-items:center; margin-bottom:10px; }
+.toolbar input { max-width:320px; }
+.scroll { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; min-width:980px; }
+th { text-align:left; font-size:13px; color:var(--muted); padding:6px 8px; border-bottom:2px solid var(--line); }
+td { padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+tr.dirty { background:var(--warn); }
+.thumb { width:56px; height:56px; object-fit:contain; background:#fafafa; border:1px solid var(--line); border-radius:6px; }
+td.actions { white-space:nowrap; display:flex; gap:6px; flex-direction:column; }
+textarea { resize:vertical; min-height:56px; }
+#toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:8px; color:#fff; background:var(--green); box-shadow:0 4px 14px #0003; }
+#toast.bad { background:var(--red); }
+@media (max-width:700px) { .add-grid { grid-template-columns:1fr; } main { padding:12px; } }
+</style>
+</head>
+<body>
+
+<section id="login-view" class="login">
+  <h2>Вхід для менеджера</h2>
+  <form id="login-form">
+    <label for="password">Пароль</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <p class="err" id="login-error"></p>
+    <button type="submit" style="width:100%">Увійти</button>
+  </form>
+</section>
+
+<div id="panel-view" class="hidden">
+  <header>
+    <h1>Tech<span>Store</span>: керування товарами</h1>
+    <button class="ghost" id="logout-btn" type="button">Вийти</button>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>Додати товар</h2>
+      <form id="add-form" class="add-grid">
+        <div><label for="a-name">Назва</label><input id="a-name" maxlength="255" required></div>
+        <div><label for="a-cat">Категорія</label><select id="a-cat" required></select></div>
+        <div><label for="a-price">Ціна, ₴</label><input id="a-price" type="number" min="0" step="0.01" required></div>
+        <div class="wide"><label for="a-desc">Короткі характеристики</label><input id="a-desc"></div>
+        <div class="wide"><label for="a-img">Посилання на картинку (https://...)</label><input id="a-img" type="url"></div>
+        <div><button type="submit">Додати товар</button></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <h2 style="margin:0">Товари <span id="count" style="color:var(--muted);font-weight:400"></span></h2>
+        <input id="search" type="search" placeholder="Пошук за назвою">
+      </div>
+      <p style="margin:0 0 10px;color:var(--muted)">Жовтий рядок означає, що зміни ще не збережені. Після «Зберегти» ціна одразу з'явиться на сайті.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>ID</th><th>Фото</th><th>Назва</th><th>Категорія</th><th>Ціна, ₴</th><th>Характеристики</th><th>Картинка (URL)</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="hidden" role="status"></div>
+
+<script>
+(function () {
+  const CATS = { laptops:'Ноутбуки', gpu:'Відеокарти', monitors:'Монітори', keyboards:'Клавіатури', mice:"Комп'ютерні мишки", headphones:'Навушники' };
+  const $ = (id) => document.getElementById(id);
+  let token = sessionStorage.getItem('admin_token') || '';
+  let products = [];
+  let toastTimer;
+
+  function toast(msg, ok = true) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = ok ? '' : 'bad';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+  }
+
+  async function api(path, options = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch(path, { ...options, headers });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (res.status === 401 && path !== '/api/admin/login') {
+      logout('Сесія завершилась. Увійдіть знову.');
+      throw new Error(data.error || 'Потрібен вхід');
+    }
+    if (!res.ok) throw new Error(data.error || 'Помилка сервера (' + res.status + ')');
+    return data;
+  }
+
+  function fillCategories(select, current) {
+    select.replaceChildren();
+    if (!CATS[current]) select.append(new Option('Оберіть категорію', ''));
+    for (const [value, label] of Object.entries(CATS)) select.append(new Option(label, value));
+    select.value = CATS[current] ? current : '';
+  }
+
+  function showPanel() {
+    $('login-view').classList.add('hidden');
+    $('panel-view').classList.remove('hidden');
+    fillCategories($('a-cat'), 'laptops');
+    loadProducts();
+  }
+
+  function logout(message) {
+    token = '';
+    sessionStorage.removeItem('admin_token');
+    $('panel-view').classList.add('hidden');
+    $('login-view').classList.remove('hidden');
+    $('login-error').textContent = message || '';
+  }
+
+  async function loadProducts() {
+    try {
+      const res = await fetch('/api/products');
+      products = await res.json();
+      renderRows();
+    } catch (e) { toast('Не вдалося завантажити товари', false); }
+  }
+
+  function renderRows() {
+    const q = $('search').value.trim().toLowerCase();
+    const list = products.filter(p => p.name.toLowerCase().includes(q));
+    $('count').textContent = '(' + list.length + ' з ' + products.length + ')';
+    $('rows').replaceChildren(...list.map(makeRow));
+  }
+
+  function makeRow(p) {
+    const tr = document.createElement('tr');
+    const cell = (child) => { const td = document.createElement('td'); td.append(child); tr.append(td); return td; };
+    const input = (type, value, extra = {}) => Object.assign(document.createElement('input'), { type, value: value ?? '', ...extra });
+
+    const img = Object.assign(document.createElement('img'), { className: 'thumb', alt: '' });
+    img.src = p.image_url || '';
+    const name = input('text', p.name, { maxLength: 255 });
+    const cat = document.createElement('select'); fillCategories(cat, p.category);
+    const price = input('number', p.price, { min: 0, step: '0.01' });
+    const desc = Object.assign(document.createElement('textarea'), { value: p.description || '' });
+    const url = input('url', p.image_url);
+    const save = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Зберегти' });
+    const del = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Видалити', className: 'danger' });
+
+    cell(document.createTextNode(p.id)); cell(img); cell(name); cell(cat); cell(price); cell(desc); cell(url);
+    const actions = cell(save); actions.className = 'actions'; actions.append(del);
+
+    [name, cat, price, desc, url].forEach(el => el.addEventListener('input', () => tr.classList.add('dirty')));
+    url.addEventListener('change', () => { img.src = url.value; });
+
+    save.addEventListener('click', async () => {
+      save.disabled = true;
+      try {
+        const updated = await api('/api/admin/products/' + p.id, { method: 'PUT', body: JSON.stringify({
+          name: name.value, category: cat.value, price: price.value, description: desc.value, image_url: url.value }) });
+        Object.assign(p, updated);
+        tr.classList.remove('dirty');
+        toast('Збережено: ' + updated.name);
+      } catch (err) { toast(err.message, false); }
+      save.disabled = false;
+    });
+
+    del.addEventListener('click', async () => {
+      if (!confirm('Видалити товар «' + p.name + '»? Це не можна скасувати.')) return;
+      try {
+        await api('/api/admin/products/' + p.id, { method: 'DELETE' });
+        products = products.filter(x => x.id !== p.id);
+        renderRows();
+        toast('Товар видалено');
+      } catch (err) { toast(err.message, false); }
+    });
+    return tr;
+  }
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('login-error').textContent = '';
+    try {
+      const data = await api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: $('password').value }) });
+      token = data.token;
+      sessionStorage.setItem('admin_token', token);
+      $('password').value = '';
+      showPanel();
+    } catch (err) { $('login-error').textContent = err.message; }
+  });
+
+  $('add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await api('/api/admin/products', { method: 'POST', body: JSON.stringify({
+        name: $('a-name').value, category: $('a-cat').value, price: $('a-price').value,
+        description: $('a-desc').value, image_url: $('a-img').value }) });
+      e.target.reset();
+      fillCategories($('a-cat'), 'laptops');
+      await loadProducts();
+      toast('Товар додано');
+    } catch (err) { toast(err.message, false); }
+  });
+
+  $('search').addEventListener('input', renderRows);
+  $('logout-btn').addEventListener('click', () => logout(''));
+  if (token) showPanel();
+})();
+</script>
+</body>
+</html>

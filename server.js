@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config(); // Підключаємо завантаження змінних середовища з .env файлу
 
 // Імпортуємо офіційну бібліотеку Google Gen AI
@@ -10,6 +11,7 @@ const { GoogleGenAI } = require('@google/genai');
 const { Pool } = require('pg');
 
 const app = express();
+app.set('trust proxy', 1); // Render стоїть за проксі, потрібно для визначення IP
 app.use(cors());
 app.use(express.json());
 
@@ -20,6 +22,18 @@ const pool = new Pool({
         rejectUnauthorized: false
     }
 });
+
+// Визначення категорії за назвою (для товарів, у яких вона ще не задана)
+function detectCategory(name) {
+    const t = String(name || '').toLowerCase();
+    if (t.includes('ноутбук')) return 'laptops';
+    if (t.includes('відеокарта')) return 'gpu';
+    if (t.includes('монітор')) return 'monitors';
+    if (t.includes('клавіатура')) return 'keyboards';
+    if (t.includes('миша') || t.includes('мишка')) return 'mice';
+    if (t.includes('навушники') || t.includes('гарнітура')) return 'headphones';
+    return 'other';
+}
 
 // Функція для автоматичного створення таблиць при запуску сервера
 async function initDB() {
@@ -42,6 +56,11 @@ async function initDB() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50)');
+        const missing = await pool.query('SELECT id, name FROM products WHERE category IS NULL');
+        for (const row of missing.rows) {
+            await pool.query('UPDATE products SET category = $1 WHERE id = $2', [detectCategory(row.name), row.id]);
+        }
         console.log('✅ Таблиці успішно створено або перевірено в базі даних Neon!');
     } catch (err) {
         console.error('❌ Помилка створення таблиць у БД:', err.message);
@@ -55,6 +74,10 @@ initDB();
 const ai = new GoogleGenAI();
 
 // === РОЗДАЧА СТАТИЧНИХ ФАЙЛІВ ТА ГОЛОВНОЇ СТОРІНКИ ===
+app.use((req, res, next) => {
+    if (/^\/(server\.js|package(-lock)?\.json)$/i.test(req.path)) return res.status(404).end();
+    next();
+});
 app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
@@ -70,6 +93,110 @@ app.get('/api/products', async (req, res) => {
         console.error('Помилка отримання товарів з БД:', err.message);
         res.status(500).json({ error: 'Internal Server Error' });
     }
+});
+
+// === АДМІН-ПАНЕЛЬ ===
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_CATEGORIES = ['laptops', 'gpu', 'monitors', 'keyboards', 'mice', 'headphones'];
+const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
+const loginAttempts = new Map(); // ip -> { count, resetAt }
+
+const signToken = (expires) => crypto.createHmac('sha256', ADMIN_PASSWORD).update(String(expires)).digest('hex');
+
+function verifyAdminToken(token) {
+    if (!ADMIN_PASSWORD || typeof token !== 'string') return false;
+    const [expires, signature] = token.split('.');
+    const exp = Number(expires);
+    if (!signature || !Number.isFinite(exp) || exp < Date.now()) return false;
+    const a = Buffer.from(signature);
+    const b = Buffer.from(signToken(expires));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requireAdmin(req, res, next) {
+    const header = req.headers.authorization || '';
+    if (!verifyAdminToken(header.startsWith('Bearer ') ? header.slice(7) : '')) {
+        return res.status(401).json({ error: 'Потрібен вхід' });
+    }
+    next();
+}
+
+app.post('/api/admin/login', (req, res) => {
+    if (!ADMIN_PASSWORD) return res.status(503).json({ error: 'Адмінку не налаштовано: додайте ADMIN_PASSWORD у Render' });
+    const now = Date.now();
+    const entry = loginAttempts.get(req.ip);
+    if (entry && entry.resetAt > now && entry.count >= 5) {
+        return res.status(429).json({ error: 'Забагато спроб. Спробуйте через 15 хвилин' });
+    }
+    const given = crypto.createHash('sha256').update(String(req.body?.password || '')).digest();
+    const real = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
+    if (!crypto.timingSafeEqual(given, real)) {
+        const e = entry && entry.resetAt > now ? entry : { count: 0, resetAt: now + 15 * 60 * 1000 };
+        e.count += 1;
+        loginAttempts.set(req.ip, e);
+        return res.status(401).json({ error: 'Невірний пароль' });
+    }
+    loginAttempts.delete(req.ip);
+    const expires = now + TOKEN_TTL_MS;
+    res.json({ token: `${expires}.${signToken(expires)}` });
+});
+
+function parseProductInput(body) {
+    const name = String(body?.name ?? '').trim();
+    const description = String(body?.description ?? '').trim();
+    const imageUrl = String(body?.image_url ?? '').trim();
+    const category = String(body?.category ?? '');
+    const rawPrice = String(body?.price ?? '').trim();
+    const price = Number(rawPrice);
+    if (!name || name.length > 255) return { error: 'Назва: від 1 до 255 символів' };
+    if (rawPrice === '' || !Number.isFinite(price) || price < 0 || price > 99999999.99) return { error: 'Ціна має бути числом від 0 до 99999999.99' };
+    if (!ADMIN_CATEGORIES.includes(category)) return { error: 'Оберіть категорію зі списку' };
+    if (description.length > 5000) return { error: 'Опис занадто довгий (максимум 5000 символів)' };
+    if (imageUrl && (!/^https?:\/\//i.test(imageUrl) || imageUrl.length > 2000)) return { error: 'Посилання на картинку має починатися з http:// або https://' };
+    return { value: [name, Math.round(price * 100) / 100, description, imageUrl || null, category] };
+}
+
+function adminError(res, err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Товар з такою назвою вже існує' });
+    console.error('Помилка адмін-панелі:', err.message);
+    res.status(500).json({ error: 'Помилка сервера' });
+}
+
+app.post('/api/admin/products', requireAdmin, async (req, res) => {
+    const parsed = parseProductInput(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    try {
+        const result = await pool.query(
+            'INSERT INTO products (name, price, description, image_url, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            parsed.value
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) { adminError(res, err); }
+});
+
+app.put('/api/admin/products/:id', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    const parsed = parseProductInput(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    try {
+        const result = await pool.query(
+            'UPDATE products SET name = $1, price = $2, description = $3, image_url = $4, category = $5 WHERE id = $6 RETURNING *',
+            [...parsed.value, id]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Товар не знайдено' });
+        res.json(result.rows[0]);
+    } catch (err) { adminError(res, err); }
+});
+
+app.delete('/api/admin/products/:id', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    try {
+        const result = await pool.query('DELETE FROM products WHERE id = $1', [id]);
+        if (!result.rowCount) return res.status(404).json({ error: 'Товар не знайдено' });
+        res.json({ success: true });
+    } catch (err) { adminError(res, err); }
 });
 
 // === НАЛАШТУВАННЯ TELEGRAM ===

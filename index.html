@@ -213,6 +213,7 @@
     <script>
     // Динамічне завантаження товарів та їхніх картинок з бази даних Neon
     // Категорія визначається за назвою товару (у таблиці products немає колонки category)
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     function detectCategory(name) {
         const t = String(name || '').toLowerCase();
         if (t.includes('ноутбук')) return 'laptops';
@@ -244,14 +245,14 @@
                     card.className = 'product-card';
                     card.setAttribute('data-id', product.id);
                     card.setAttribute('data-price', product.price);
-                    card.setAttribute('data-category', detectCategory(product.name));
+                    card.setAttribute('data-category', product.category || detectCategory(product.name));
                     
                     // Зображення береться безпосередньо з колонки image_url у базі даних Neon
                     card.innerHTML = `
                         <button class="like-btn" data-id="${product.id}" title="Додати в обране"><i class="fa-regular fa-heart"></i></button>
-                        <img src="${product.image_url || 'https://via.placeholder.com/400'}" alt="${product.name}">
-                        <h3 class="product-title">${product.name}</h3>
-                        <p class="product-specs">${product.description || ''}</p>
+                        <img src="${esc(product.image_url || 'https://via.placeholder.com/400')}" alt="${esc(product.name)}">
+                        <h3 class="product-title">${esc(product.name)}</h3>
+                        <p class="product-specs">${esc(product.description)}</p>
                         <div class="product-price-block">
                             <span class="price">${Number(product.price).toLocaleString('uk-UA')} ₴</span>
                             <button class="buy-btn add-to-cart-btn" data-id="${product.id}"><i class="fa-solid fa-cart-shopping"></i></button>
