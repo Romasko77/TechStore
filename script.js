@@ -809,9 +809,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 border-radius: 8px;
                 max-width: 80%;
                 word-wrap: break-word;
+                white-space: pre-wrap;
                 ${isUser ? 'background: #2ecc71; color: white; align-self: flex-end;' : 'background: #f1f2f6; color: #333; align-self: flex-start;'}
             `;
-            msgDiv.textContent = text;
+            const clean = isUser ? text : String(text)
+                .replace(/\*\*(.*?)\*\*/g, '$1')
+                .replace(/^\s*\*\s+/gm, '• ')
+                .replace(/\s+\*\s+/g, '\n• ');
+            msgDiv.textContent = clean;
             messages.appendChild(msgDiv);
             messages.scrollTop = messages.scrollHeight;
         }
@@ -863,13 +868,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Періодична перевірка відповідей від Telegram через ваш сервер
         async function checkReplies() {
             try {
-                const response = await fetch(`/api/get-replies/${currentUserId}`)
+                const response = await fetch(`/api/get-replies/${currentUserId}`);
                 const data = await response.json();
 
-                if (data.replies && data.replies.length > 0) {
-                    data.replies.forEach(replyText => {
-                        addMessage(replyText, false);
-                    });
+                // Відповіді бота вже показані одразу після відправки, тому тут беремо лише відповіді менеджера
+                const managerReplies = (data.replies || []).filter(r => String(r).startsWith('Менеджер:'));
+                const seen = parseInt(localStorage.getItem('chat_manager_seen') || '0', 10);
+
+                managerReplies.slice(seen).forEach(replyText => addMessage(replyText, false));
+                if (managerReplies.length !== seen) {
+                    localStorage.setItem('chat_manager_seen', String(managerReplies.length));
                 }
             } catch (e) {
                 // Сервер може бути тимчасово недоступний
@@ -987,6 +995,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (closeProductModalBtn) closeProductModalBtn.addEventListener('click', () => productModal.classList.remove('active'));
     if (productModal) productModal.addEventListener('click', (e) => { if (e.target === productModal) productModal.classList.remove('active'); });
+
+    // Кнопка "Знайти" і Enter у полі пошуку
+    const searchBtnEl = document.getElementById('search-btn');
+    if (searchBtnEl && searchInput) {
+        const runSearch = () => {
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.focus();
+        };
+        searchBtnEl.addEventListener('click', runSearch);
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') runSearch();
+        });
+    }
 
     // Ініціалізація додаткових функцій
     updateCartCount();

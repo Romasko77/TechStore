@@ -140,7 +140,8 @@ app.post('/api/message', async (req, res) => {
             Дотримуйся таких правил:
             1. Якщо питання стосується техніки, комп'ютерів, комплектуючих, характеристик, магазину, замовлень, доставки чи гарантії — відповідай корисно, ввічливо та чітко українською мовою.
             2. Якщо питання НЕ стосується тематики магазину (наприклад, політика, рецепти, погода, сторонні теми тощо), відповідай чітко і без зайвих слів цим текстом: "Вибачте, але це питання не стосується тематики нашого магазину TechStore."
-            3. Якщо питання занадто складне, вимагає персональної допомоги або ти не знаєш на нього точної відповіді, напиши у тексті відповіді маркер "NEED_MANAGER".`
+            3. Якщо питання занадто складне, вимагає персональної допомоги або ти не знаєш на нього точної відповіді, напиши у тексті відповіді маркер "NEED_MANAGER".
+            4. Пиши звичайним текстом без Markdown: без зірочок, решіток і символів списку. Відповідай коротко (до 5-6 речень).`
         });
 
         let botReply = aiResponse.text.trim();
@@ -164,15 +165,19 @@ app.post('/api/message', async (req, res) => {
         if (needsManager || !botReply.includes("не стосується тематики")) {
             const messageToTelegram = `📩 *Повідомлення з сайту (AI Бот)*\n👤 *Користувач:* ${userName || 'Гість'}\n🆔 *User ID:* \`${userId}\`\n💬 *Повідомлення:* ${text}\n🤖 *Відповідь бота:* ${finalMessageForUser}`;
             
-            const result = await telegramRequest('sendMessage', {
-                chat_id: adminChatId,
-                text: messageToTelegram,
-                parse_mode: 'Markdown'
-            });
+            telegramRequest('sendMessage', {
 
-            if (result.ok) {
-                messageToUserMap.set(result.result.message_id, userId);
-            }
+                chat_id: adminChatId,
+
+                text: messageToTelegram,
+
+                parse_mode: 'Markdown'
+
+            })
+                .then(result => {
+                    if (result && result.ok) messageToUserMap.set(result.result.message_id, userId);
+                })
+                .catch(e => console.error('Telegram:', e.message));
         }
 
         res.json({ success: true, reply: finalMessageForUser });
@@ -182,15 +187,15 @@ app.post('/api/message', async (req, res) => {
         
         const fallbackReply = "Вибачте, наразі сталася технічна помилка. Ваше повідомлення передано менеджеру.";
         
-        // Зберігаємо резервну відповідь у БД
-        await pool.query(
+        res.status(500).json({ error: 'Internal Server Error', reply: fallbackReply });
+
+        // Далі — у фоні, щоб клієнт не чекав
+        pool.query(
             'INSERT INTO chat_messages (user_id, user_name, sender, message) VALUES ($1, $2, $3, $4)',
             [userId, userName || 'Гість', 'bot', fallbackReply]
-        );
-        
-        await sendToTelegramAdmin(userId, userName, text);
+        ).catch(e => console.error('Помилка збереження резервної відповіді:', e.message));
 
-        res.status(500).json({ error: 'Internal Server Error' });
+        sendToTelegramAdmin(userId, userName, text).catch(e => console.error('Telegram:', e.message));
     }
 });
 
