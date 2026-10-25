@@ -6,12 +6,52 @@ require('dotenv').config(); // Підключаємо завантаження �
 // Імпортуємо офіційну бібліотеку Google Gen AI
 const { GoogleGenAI } = require('@google/genai');
 
+// Імпортуємо Pool для роботи з PostgreSQL (Neon)
+const { Pool } = require('pg');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// === ПІДКЛЮЧЕННЯ ДО БАЗИ ДАНИХ NEON (PostgreSQL) ===
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
+    }
+});
+
+// Функція для автоматичного створення таблиць при запуску сервера
+async function initDB() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                price NUMERIC(10, 2) NOT NULL,
+                description TEXT,
+                image_url TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                user_name VARCHAR(255),
+                sender VARCHAR(50) NOT NULL, -- 'user', 'bot', 'manager'
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('✅ Таблиці успішно створено або перевірено в базі даних Neon!');
+    } catch (err) {
+        console.error('❌ Помилка створення таблиць у БД:', err.message);
+    }
+}
+
+// Викликаємо функцію створення таблиць
+initDB();
+
 // === ІНІЦІАЛІЗАЦІЯ GEMINI AI ===
-// Автоматично використовує GEMINI_API_KEY з файлу .env
 const ai = new GoogleGenAI();
 
 // === РОЗДАЧА СТАТИЧНИХ ФАЙЛІВ ТА ГОЛОВНОЇ СТОРІНКИ ===
@@ -21,12 +61,9 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// === НАЛАШТУВАННЯ TELEGRAM (змінні беруться з .env) ===
+// === НАЛАШТУВАННЯ TELEGRAM ===
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const adminChatId = process.env.ADMIN_CHAT_ID;
-
-// Сховище відповідей для клієнтів (userId -> array of replies)
-const pendingReplies = new Map();
 
 // Сховище відповідності Telegram message_id -> userId
 const messageToUserMap = new Map();
@@ -41,7 +78,7 @@ async function telegramRequest(method, data) {
     return await response.json();
 }
 
-// Допоміжна функція для відправки сповіщень адміністратору в Telegram, коли потрібен менеджер
+// Допоміжна функція для відправки сповіщень адміністратору в Telegram
 async function sendToTelegramAdmin(userId, userName, text) {
     if (!adminChatId || !TELEGRAM_BOT_TOKEN) return;
     const alertMessage = `⚠️ *УВАГА! Потрібне втручання менеджера!*\n👤 *Користувач:* ${userName || 'Гість'}\n🆔 *User ID:* \`${userId}\`\n💬 *Запит клієнта:* ${text}\n\n_(Бот не зміг відповісти або спрацював запит менеджера)_`;
@@ -79,6 +116,12 @@ app.post('/api/message', async (req, res) => {
     }
 
     try {
+        // Зберігаємо повідомлення користувача в базу даних
+        await pool.query(
+            'INSERT INTO chat_messages (user_id, user_name, sender, message) VALUES ($1, $2, $3, $4)',
+            [userId, userName || 'Гість', 'user', text]
+        );
+
         // Виклик генерації з підтримкою авто-повтору (retry)
         const aiResponse = await generateWithRetry(ai, 'gemini-3.8-flash', text, {
             systemInstruction: `Ти — розумний і ввічливий бот-консультант інтернет-магазину комп'ютерної техніки "TechStore". 
@@ -97,16 +140,14 @@ app.post('/api/message', async (req, res) => {
         if (botReply.includes("NEED_MANAGER")) {
             needsManager = true;
             finalMessageForUser = "Дякуємо за запитання! Ваше повідомлення передано менеджеру, і він зв'яжеться з вами найближчим часом.";
-            
-            // Відправляємо сповіщення адміністратору в Telegram
             await sendToTelegramAdmin(userId, userName, text);
         }
 
-        // Зберігаємо відповідь бота у масив для відправки у віджет користувача
-        if (!pendingReplies.has(userId)) {
-            pendingReplies.set(userId, []);
-        }
-        pendingReplies.get(userId).push(finalMessageForUser);
+        // Зберігаємо відповідь бота в базу даних
+        await pool.query(
+            'INSERT INTO chat_messages (user_id, user_name, sender, message) VALUES ($1, $2, $3, $4)',
+            [userId, userName || 'Гість', 'bot', finalMessageForUser]
+        );
 
         // Дублюємо оригінальне повідомлення користувача в адмін-чат Telegram
         if (needsManager || !botReply.includes("не стосується тематики")) {
@@ -128,12 +169,14 @@ app.post('/api/message', async (req, res) => {
     } catch (err) {
         console.error('Помилка обробки повідомлення ШІ:', err.message);
         
-        // Резервний варіант, якщо всі спроби вичерпано або сталася інша критична помилка
         const fallbackReply = "Вибачте, наразі сталася технічна помилка. Ваше повідомлення передано менеджеру.";
-        if (!pendingReplies.has(userId)) {
-            pendingReplies.set(userId, []);
-        }
-        pendingReplies.get(userId).push(fallbackReply);
+        
+        // Зберігаємо резервну відповідь у БД
+        await pool.query(
+            'INSERT INTO chat_messages (user_id, user_name, sender, message) VALUES ($1, $2, $3, $4)',
+            [userId, userName || 'Гість', 'bot', fallbackReply]
+        );
+        
         await sendToTelegramAdmin(userId, userName, text);
 
         res.status(500).json({ error: 'Internal Server Error' });
@@ -175,13 +218,14 @@ async function pollTelegramUpdates() {
                     }
                 }
 
-                // Збереження відповіді менеджера для клієнта
+                // Збереження відповіді менеджера в базу даних для клієнта
                 if (targetUserId) {
-                    if (!pendingReplies.has(targetUserId)) {
-                        pendingReplies.set(targetUserId, []);
-                    }
-                    pendingReplies.get(targetUserId).push(`Менеджер: ${replyText}`);
-                    console.log(`✅ [УСПІХ] Відповідь менеджера збережено для ${targetUserId}: ${replyText}`);
+                    const managerReplyFormatted = `Менеджер: ${replyText}`;
+                    await pool.query(
+                        'INSERT INTO chat_messages (user_id, user_name, sender, message) VALUES ($1, $2, $3, $4)',
+                        [targetUserId, 'Клієнт', 'manager', managerReplyFormatted]
+                    );
+                    console.log(`✅ [УСПІХ] Відповідь менеджера збережено в БД для ${targetUserId}: ${replyText}`);
                 } else if (msg.reply_to_message) {
                     console.log('⚠️ [ПОМИЛКА] Не вдалося визначити ID. Використайте команду: /r <userId> <текст>');
                 }
@@ -194,12 +238,25 @@ async function pollTelegramUpdates() {
     }
 }
 
-// 3. Ендпоінт для сайту — отримання нових відповідей
-app.get('/api/get-replies/:userId', (req, res) => {
+// 3. Ендпоінт для сайту — отримання нових відповідей з бази даних
+app.get('/api/get-replies/:userId', async (req, res) => {
     const { userId } = req.params;
-    const replies = pendingReplies.get(userId) || [];
-    pendingReplies.set(userId, []); // очищаємо масив після відправки
-    res.json({ replies });
+    try {
+        // Отримуємо нові відповіді (від бота або менеджера), які ще не відправлялися або зберігалися в історії
+        const result = await pool.query(
+            'SELECT message FROM chat_messages WHERE user_id = $1 AND sender IN (\'bot\', \'manager\') ORDER BY id ASC',
+            [userId]
+        );
+        
+        // Витягуємо лише тексти повідомлень
+        const replies = result.rows.map(row => row.message);
+
+        // Для спрощення можна очищати історію або відправляти нові (тут повертаємо список)
+        res.json({ replies });
+    } catch (err) {
+        console.error('Помилка отримання повідомлень з БД:', err.message);
+        res.json({ replies: [] });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
