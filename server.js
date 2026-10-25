@@ -101,21 +101,32 @@ async function sendToTelegramAdmin(userId, userName, text) {
     });
 }
 
-// Допоміжна функція для автоматичного повтору запиту при помилці 503 / High Demand
-async function generateWithRetry(ai, model, contents, config, retries = 3, delay = 2000) {
-    for (let i = 0; i < retries; i++) {
+// Запасні моделі: якщо перша перевантажена (503) або не відповідає, пробуємо наступну
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
+const MODEL_TIMEOUT_MS = 12000; // максимум очікування однієї моделі
+
+function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), ms);
+        promise.then(
+            value => { clearTimeout(timer); resolve(value); },
+            error => { clearTimeout(timer); reject(error); }
+        );
+    });
+}
+
+async function generateWithRetry(ai, model, contents, config) {
+    const models = [model, ...FALLBACK_MODELS.filter(m => m !== model)];
+    let lastError;
+    for (const m of models) {
         try {
-            return await ai.models.generateContent({ model, contents, config });
+            return await withTimeout(ai.models.generateContent({ model: m, contents, config }), MODEL_TIMEOUT_MS);
         } catch (err) {
-            const isUnavailable = err.message && (err.message.includes('503') || err.message.includes('UNAVAILABLE') || err.message.includes('high demand'));
-            if (isUnavailable && i < retries - 1) {
-                console.log(`⚠️ Сервери Google перевантажені (503). Спроба ${i + 1} з ${retries}. Чекаємо ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
-            throw err;
+            lastError = err;
+            console.log(`⚠️ Модель ${m} не відповіла (${String(err.message).slice(0, 80)}). Пробуємо наступну...`);
         }
     }
+    throw lastError;
 }
 
 // 1. Отримання повідомлення з сайту (ОБРОБКА ЧЕРЕЗ GEMINI AI)

@@ -819,6 +819,7 @@ document.addEventListener('DOMContentLoaded', () => {
             msgDiv.textContent = clean;
             messages.appendChild(msgDiv);
             messages.scrollTop = messages.scrollHeight;
+            return msgDiv;
         }
 
         // База даних сталих відповідей на ключові слова
@@ -832,38 +833,6 @@ document.addEventListener('DOMContentLoaded', () => {
             'розстрочка': '💳 Ви можете оформити товар у розстрочку до 10 місяців без переплат через наш сайт.',
             'контакти': '📞 Наш телефон: 0 800 330 000. Працюємо щодня з 9:00 до 20:00.'
         };
-
-        // Відправка повідомлення на локальний Node.js сервер та отримання відповіді від Gemini
-        async function sendMessageToServer(userMessage) {
-            let userName = 'Анонімний користувач';
-            try {
-                userName = localStorage.getItem('techstore_user') || 'Анонімний користувач';
-            } catch (e) {}
-
-            try {
-                const response = await fetch('/api/message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: currentUserId,
-                        userName: userName,
-                        text: userMessage
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.reply) {
-                    // Виводимо відповідь від Gemini або повідомлення про менеджера, яке повернув сервер
-                    addMessage(data.reply, false);
-                } else {
-                    addMessage("💬 Дякуємо за запитання! Ваше повідомлення передано менеджеру.", false);
-                }
-            } catch (err) {
-                console.error('Помилка надсилання на сервер:', err);
-                addMessage("Вибачте, сталася помилка з'єднання з сервером.", false);
-            }
-        }
 
         // Періодична перевірка відповідей від Telegram через ваш сервер
         async function checkReplies() {
@@ -921,6 +890,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 userName = localStorage.getItem('techstore_user') || 'Анонімний користувач';
             } catch (e) {}
 
+            const typingEl = addMessage('⏳ Бот друкує...', false);
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 45000);
+
             try {
                 const response = await fetch('/api/message', {
                     method: 'POST',
@@ -929,20 +902,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         userId: currentUserId,
                         userName: userName,
                         text: userMessage
-                    })
+                    }),
+                    signal: controller.signal
                 });
-                
+
                 const data = await response.json();
-                
-                if (data.reply) {
-                    // Виводимо реальну відповідь від Gemini або статус від сервера
-                    addMessage(data.reply, false);
-                } else {
-                    addMessage("💬 Дякуємо за запитання! Ваше повідомлення передано менеджеру.", false);
-                }
+                if (typingEl) typingEl.remove();
+                addMessage(data.reply || "💬 Дякуємо за запитання! Ваше повідомлення передано менеджеру.", false);
             } catch (err) {
                 console.error('Помилка надсилання на сервер:', err);
-                addMessage("Вибачте, сталася помилка з'єднання з сервером.", false);
+                if (typingEl) typingEl.remove();
+                addMessage("Вибачте, бот зараз перевантажений. Спробуйте ще раз за хвилину.", false);
+            } finally {
+                clearTimeout(timer);
             }
         }
 
