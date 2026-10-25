@@ -61,6 +61,17 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// === ЕНДПОІНТ ДЛЯ ОТРИМАННЯ ТОВАРІВ З БАЗИ ДАНИХ ===
+app.get('/api/products', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM products ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Помилка отримання товарів з БД:', err.message);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 // === НАЛАШТУВАННЯ TELEGRAM ===
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const adminChatId = process.env.ADMIN_CHAT_ID;
@@ -242,16 +253,12 @@ async function pollTelegramUpdates() {
 app.get('/api/get-replies/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        // Отримуємо нові відповіді (від бота або менеджера), які ще не відправлялися або зберігалися в історії
         const result = await pool.query(
             'SELECT message FROM chat_messages WHERE user_id = $1 AND sender IN (\'bot\', \'manager\') ORDER BY id ASC',
             [userId]
         );
         
-        // Витягуємо лише тексти повідомлень
         const replies = result.rows.map(row => row.message);
-
-        // Для спрощення можна очищати історію або відправляти нові (тут повертаємо список)
         res.json({ replies });
     } catch (err) {
         console.error('Помилка отримання повідомлень з БД:', err.message);
