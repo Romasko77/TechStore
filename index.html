@@ -233,6 +233,18 @@
     <script src="script.js"></script>
     <script>
     // Динамічне завантаження товарів та їхніх картинок з бази даних Neon
+    // Категорія визначається за назвою товару (у таблиці products немає колонки category)
+    function detectCategory(name) {
+        const t = String(name || '').toLowerCase();
+        if (t.includes('ноутбук')) return 'laptops';
+        if (t.includes('відеокарта')) return 'gpu';
+        if (t.includes('монітор')) return 'monitors';
+        if (t.includes('клавіатура')) return 'keyboards';
+        if (t.includes('миша') || t.includes('мишка')) return 'mice';
+        if (t.includes('навушники') || t.includes('гарнітура')) return 'headphones';
+        return 'other';
+    }
+
     async function loadProductsFromDB() {
         try {
             const response = await fetch('/api/products');
@@ -253,6 +265,7 @@
                     card.className = 'product-card';
                     card.setAttribute('data-id', product.id);
                     card.setAttribute('data-price', product.price);
+                    card.setAttribute('data-category', detectCategory(product.name));
                     
                     // Зображення береться безпосередньо з колонки image_url у базі даних Neon
                     card.innerHTML = `
@@ -267,6 +280,7 @@
                     `;
                     grid.appendChild(card);
                 });
+                if (window.initLikeButtons) window.initLikeButtons();
             }
         } catch (err) {
             console.error('Помилка завантаження товарів із БД:', err);

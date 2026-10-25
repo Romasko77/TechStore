@@ -123,14 +123,31 @@ document.addEventListener('DOMContentLoaded', () => {
         return imgEl.getAttribute('src') || imgEl.src || '';
     }
 
-    // 1. ВІДКРИТТЯ КАРТКИ ТОВАРУ У МОДАЛЬНОМУ ВІКНІ
+// 1. ВІДКРИТТЯ КАРТКИ ТОВАРУ У МОДАЛЬНОМУ ВІКНІ
     function openProductModal(card) {
         if (!productModal) return;
         
         activeCardForCart = card;
         const id = card.dataset.id;
-        const category = card.dataset.category || 'default';
+        
+        // Беремо оригінальну категорію картки для фільтрів сайту
+        const baseCategory = card.dataset.category || 'default';
+        
+        // Окрема категорія спеціально для вибору опцій у модалці (не ламає фільтри)
         const titleEl = card.querySelector('.product-title');
+        const titleText = (titleEl ? titleEl.textContent : '').toLowerCase();
+        
+        let modalCategory = baseCategory;
+        if (modalCategory === 'default' || !modalCategory) {
+            if (titleText.includes('монітор') || titleText.includes('monitor')) {
+                modalCategory = 'monitors';
+            } else if (titleText.includes('rtx') || titleText.includes('gtx') || titleText.includes('відеокарта') || titleText.includes('gpu')) {
+                modalCategory = 'gpu';
+            } else {
+                modalCategory = 'laptops'; // Все інше за замовчуванням отримує параметри ноутбука з пам'яттю
+            }
+        }
+
         const specsEl = card.querySelector('.product-specs');
         const priceEl = card.querySelector('.price');
 
@@ -140,7 +157,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modalSpecs) modalSpecs.textContent = specsEl ? specsEl.textContent : '';
         if (modalImg) modalImg.src = getCardImageSrc(card);
 
-        const options = categoryOptions[category] || categoryOptions.default;
+        // Використовуємо modalCategory для отримання опцій пам'яті/кольорів
+        const options = categoryOptions[modalCategory] || categoryOptions.default;
 
         function updateTotalPrice(additionalPrice = 0) {
             const finalPrice = basePrice + additionalPrice;
@@ -206,72 +224,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        renderSimilarProducts(category, id);
+        // Для схожих товарів передаємо базову категорію
+        renderSimilarProducts(baseCategory, id);
         renderReviews(id);
 
         productModal.classList.add('active');
     }
-
-    function renderSimilarProducts(category, currentId) {
-        if (!modalSimilarProducts) return;
-        modalSimilarProducts.innerHTML = '';
-        const allCards = Array.from(document.querySelectorAll('.product-card'));
-        
-        let similars = allCards.filter(c => c.dataset.category === category && c.dataset.id !== currentId);
-        if (similars.length < 3) {
-            similars = allCards.filter(c => c.dataset.id !== currentId);
-        }
-
-        similars.slice(0, 4).forEach(simCard => {
-            const title = simCard.querySelector('.product-title')?.textContent || '';
-            const price = simCard.querySelector('.price')?.textContent || '';
-            const img = getCardImageSrc(simCard);
-
-            const div = document.createElement('div');
-            div.className = 'similar-card';
-            div.innerHTML = `
-                <img src="${img}" alt="${title}">
-                <h5>${title}</h5>
-                <div class="similar-price">${price}</div>
-            `;
-            div.onclick = () => openProductModal(simCard);
-            modalSimilarProducts.appendChild(div);
-        });
-    }
-
-    document.addEventListener('click', (e) => {
-        const card = e.target.closest('.product-card');
-        if (!card) return;
-
-        if (e.target.closest('.add-to-cart-btn') || e.target.closest('.buy-btn')) {
-            addToCartFromCard(card);
-            return;
-        }
-
-        if (e.target.closest('.like-btn')) return;
-
-        openProductModal(card);
-    });
-
-    if (closeProductModalBtn) {
-        closeProductModalBtn.addEventListener('click', () => productModal.classList.remove('active'));
-    }
-
-    if (productModal) {
-        productModal.addEventListener('click', (e) => {
-            if (e.target === productModal) productModal.classList.remove('active');
-        });
-    }
-
-    if (modalAddToCartBtn) {
-        modalAddToCartBtn.addEventListener('click', () => {
-            if (activeCardForCart) {
-                addToCartFromCard(activeCardForCart);
-                productModal.classList.remove('active');
-            }
-        });
-    }
-
     // ВІДГУКИ ДО ТОВАРІВ
     function renderReviews(productId) {
         let reviewsContainer = document.getElementById('modal-reviews-section');
@@ -713,7 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (wishlistCount) wishlistCount.textContent = wishlist.length;
     }
 
+    function initLikeButtons() {
     document.querySelectorAll('.like-btn').forEach(btn => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
         const card = btn.closest('.product-card');
         const cardId = card.dataset.id;
 
@@ -749,6 +710,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateWishlistCount();
         });
     });
+    }
+    window.initLikeButtons = initLikeButtons;
+    initLikeButtons();
 
     // 7. Повноцінний чат із сервером Node.js, автовідповідями та сповіщенням про менеджера
     function initBotAssistant() {
@@ -984,6 +948,45 @@ document.addEventListener('DOMContentLoaded', () => {
         // Перевіряємо наявність нових відповідей кожні 3 секунди
         setInterval(checkReplies, 3000);
     }
+
+    // === ВІДНОВЛЕНІ ФУНКЦІЇ: кліки по картках, кнопка "Купити", схожі товари ===
+    function renderSimilarProducts(category, currentId) {
+        if (!modalSimilarProducts) return;
+        modalSimilarProducts.innerHTML = '';
+        const similar = Array.from(document.querySelectorAll('#product-grid .product-card'))
+            .filter(c => String(c.dataset.id) !== String(currentId) && c.dataset.category === category)
+            .slice(0, 4);
+        similar.forEach(c => {
+            const title = c.querySelector('.product-title')?.textContent || '';
+            const price = c.querySelector('.price')?.textContent || '';
+            const item = document.createElement('div');
+            item.style.cssText = 'cursor:pointer; text-align:center; width:130px;';
+            item.innerHTML = `<img src="${getCardImageSrc(c)}" alt="" style="width:100%; height:80px; object-fit:contain;"><div style="font-size:12px; font-weight:600;">${title}</div><div style="font-size:12px; color:#2ecc71;">${price}</div>`;
+            item.addEventListener('click', () => openProductModal(c));
+            modalSimilarProducts.appendChild(item);
+        });
+    }
+
+    // Делегування кліків: працює і для карток, створених пізніше з бази даних
+    document.addEventListener('click', (e) => {
+        const card = e.target.closest('.product-card');
+        if (!card) return;
+        if (e.target.closest('.like-btn')) return;
+        if (e.target.closest('.add-to-cart-btn')) {
+            addToCartFromCard(card);
+            return;
+        }
+        openProductModal(card);
+    });
+
+    if (modalAddToCartBtn) {
+        modalAddToCartBtn.addEventListener('click', () => {
+            if (activeCardForCart) addToCartFromCard(activeCardForCart);
+        });
+    }
+
+    if (closeProductModalBtn) closeProductModalBtn.addEventListener('click', () => productModal.classList.remove('active'));
+    if (productModal) productModal.addEventListener('click', (e) => { if (e.target === productModal) productModal.classList.remove('active'); });
 
     // Ініціалізація додаткових функцій
     updateCartCount();
