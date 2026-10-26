@@ -6,6 +6,15 @@
     <title>TechStore - Магазин комп'ютерної техніки</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    .breadcrumbs { font-size: 14px; margin: 18px 0 6px; }
+    .breadcrumbs ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; align-items: center; }
+    .breadcrumbs li + li::before { content: "›"; margin-right: 6px; color: #9aa3a0; }
+    .breadcrumbs a { color: #27ae60; text-decoration: none; }
+    .breadcrumbs a:hover, .breadcrumbs a:focus-visible { text-decoration: underline; }
+    .breadcrumbs [aria-current] { color: #555; font-weight: 600; }
+    .modal-crumbs { margin: 0 0 10px; font-size: 13px; }
+</style>
 </head>
 <body>
 
@@ -84,6 +93,8 @@
         </section>
 
         <!-- Основна область -->
+        <nav class="breadcrumbs" id="catalog-breadcrumbs" aria-label="Хлібні крихти"></nav>
+
         <div class="main-layout" id="catalog">
             
             <!-- Sidebar -->
@@ -172,6 +183,7 @@
                     <img id="modal-product-img" src="" alt="Товар">
                 </div>
                 <div class="product-modal-info">
+                    <nav class="breadcrumbs modal-crumbs" id="modal-breadcrumbs" aria-label="Хлібні крихти"></nav>
                     <h2 id="modal-product-title">Назва товару</h2>
                     <div class="modal-product-status">
                         <span class="stock-status"><i class="fa-solid fa-check"></i> В наявності</span>
@@ -268,6 +280,74 @@
     }
 
     document.addEventListener('DOMContentLoaded', loadProductsFromDB);
+    </script>
+    <script>
+    // Хлібні крихти: каталог (залежить від фільтра) і вікно товару
+    (function () {
+        const CAT_NAMES = { laptops: 'Ноутбуки', gpu: 'Відеокарти', monitors: 'Монітори', keyboards: 'Клавіатури', mice: "Комп'ютерні мишки", headphones: 'Навушники' };
+        const $ = (id) => document.getElementById(id);
+
+        function render(el, items) {
+            if (!el) return;
+            const ol = document.createElement('ol');
+            items.forEach((item, i) => {
+                const li = document.createElement('li');
+                if (i === items.length - 1 || !item.onClick) {
+                    const span = document.createElement('span');
+                    span.textContent = item.label;
+                    span.setAttribute('aria-current', 'page');
+                    li.append(span);
+                } else {
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.textContent = item.label;
+                    a.addEventListener('click', (e) => { e.preventDefault(); item.onClick(); });
+                    li.append(a);
+                }
+                ol.append(li);
+            });
+            el.replaceChildren(ol);
+        }
+
+        function closeModal() {
+            if ($('product-modal').classList.contains('active')) $('close-product-modal').click();
+        }
+        function goHome() {
+            closeModal();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        function showCategory(cat) {
+            closeModal();
+            const boxes = document.querySelectorAll('.category-checkbox');
+            boxes.forEach(cb => { cb.checked = cat === 'all' || cb.value === cat; });
+            if (boxes[0]) boxes[0].dispatchEvent(new Event('change', { bubbles: true }));
+            $('catalog').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateCatalogCrumbs() {
+            const boxes = document.querySelectorAll('.category-checkbox');
+            const checked = Array.from(boxes).filter(cb => cb.checked);
+            const items = [{ label: 'Головна', onClick: goHome }, { label: 'Каталог', onClick: () => showCategory('all') }];
+            if (checked.length === 1) items.push({ label: CAT_NAMES[checked[0].value] || checked[0].value });
+            else if (checked.length > 1 && checked.length < boxes.length) items.push({ label: 'Категорій: ' + checked.length });
+            render($('catalog-breadcrumbs'), items);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.category-checkbox').forEach(cb => cb.addEventListener('change', updateCatalogCrumbs));
+            updateCatalogCrumbs();
+        });
+
+        document.addEventListener('techstore:product-open', (e) => {
+            const card = e.detail.card;
+            const cat = card.dataset.category;
+            const title = (card.querySelector('.product-title') || {}).textContent || '';
+            const items = [{ label: 'Головна', onClick: goHome }];
+            if (CAT_NAMES[cat]) items.push({ label: CAT_NAMES[cat], onClick: () => showCategory(cat) });
+            items.push({ label: title });
+            render($('modal-breadcrumbs'), items);
+        });
+    })();
     </script>
 </body>
 </html>

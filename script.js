@@ -228,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSimilarProducts(baseCategory, id);
         renderReviews(id);
 
+        document.dispatchEvent(new CustomEvent('techstore:product-open', { detail: { card } }));
         productModal.classList.add('active');
     }
     // ВІДГУКИ ДО ТОВАРІВ
