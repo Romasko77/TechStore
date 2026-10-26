@@ -1,0 +1,8 @@
+/* Хлібні крихти для сторінок: обране, оформлення замовлення, вхід */
+.breadcrumbs { font-size: 14px; margin: 18px 0 6px; }
+.breadcrumbs ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; align-items: center; }
+.breadcrumbs li + li::before { content: "›"; margin-right: 6px; color: #9aa3a0; }
+.breadcrumbs a { color: #27ae60; text-decoration: none; }
+.breadcrumbs a:hover, .breadcrumbs a:focus-visible { text-decoration: underline; }
+.breadcrumbs [aria-current] { color: #555; font-weight: 600; }
+.auth-container .breadcrumbs { margin: 0 0 14px; }
