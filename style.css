@@ -1450,3 +1450,170 @@ body {
 .chat-widget {
     display: none !important;
 }
+
+/* =====================================================
+   АДАПТИВНІСТЬ (телефони та планшети)
+   Цей блок має бути в самому кінці файлу
+   ===================================================== */
+
+img { max-width: 100%; }
+
+/* Кнопка "Фільтри" - на ПК прихована */
+.filters-toggle { display: none; }
+
+/* ---------- Планшети та менше ---------- */
+@media (max-width: 992px) {
+    .header-container { gap: 12px; }
+    .search-bar { max-width: none; }
+    .sidebar { width: 220px; }
+    .product-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+}
+
+/* ---------- Телефони та вузькі планшети ---------- */
+@media (max-width: 768px) {
+
+    /* Шапка: логотип + іконки в першому рядку, пошук - у другому */
+    .header { padding: 10px 0; margin-bottom: 12px; }
+    .header-container {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .logo { font-size: 22px; order: 1; }
+    .user-actions { order: 2; gap: 14px; margin-left: auto; }
+    .search-bar { order: 3; flex: 1 1 100%; width: 100%; }
+    .search-bar input { font-size: 16px; padding: 10px 12px; } /* 16px - щоб iOS не зумив поле */
+    .search-bar button { padding: 10px 14px; }
+    #user-name-display {
+        max-width: 70px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .action-btn { font-size: 11px; min-width: 44px; }
+    .action-btn i { font-size: 18px; }
+    .search-results { max-height: 60vh; }
+
+    /* Шапка внутрішніх сторінок: лого зліва, "Назад" справа в одному рядку */
+    .back-link { order: 2; margin-left: auto; font-size: 13px; text-align: right; }
+
+    /* Сторінка входу: відступи від країв екрана */
+    .auth-page { padding: 16px; align-items: flex-start; }
+    .auth-page .auth-container { margin: auto; }
+
+    /* Радіо-кнопки оплати: зручна зона натискання */
+    .radio-label { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+
+    /* Банер */
+    .hero-banner { padding: 22px 18px; margin-bottom: 22px; border-radius: 10px; }
+    .banner-content h2 { font-size: 22px; }
+    .banner-content p { font-size: 14px; margin-bottom: 14px; }
+    .banner-btn { padding: 10px 16px; }
+
+    .section-title { font-size: 19px; margin-bottom: 12px; }
+
+    /* Каталог: фільтри над товарами, з кнопкою згортання */
+    .main-layout { flex-direction: column; gap: 14px; }
+    .filters-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-dark);
+        cursor: pointer;
+    }
+    .sidebar { width: 100%; }
+    .sidebar.filters-collapsed { display: none; }
+    .sidebar .filter-title { display: none; }
+    .checkbox-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 8px;
+    }
+    .checkbox-item { padding: 4px 0; }
+    .price-inputs input { font-size: 16px; padding: 9px; }
+    .price-btn { padding: 9px 14px; }
+
+    .catalog-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .sort-block { justify-content: space-between; }
+    .sort-block select { flex: 1; font-size: 16px; padding: 9px 12px; }
+
+    /* Картки товарів: 2 колонки */
+    .product-grid,
+    .top-sales-grid,
+    .wishlist-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .product-card { padding: 10px; }
+    .product-card img { height: 110px; }
+    .product-title { font-size: 13px; }
+    .product-specs { font-size: 11px; margin-bottom: 10px; }
+    .price { font-size: 15px; }
+    .buy-btn { padding: 9px 12px; }
+    .like-btn { width: 36px; height: 36px; }
+
+    /* Модальні вікна */
+    .cart-modal { width: 94%; max-height: 90vh; max-height: 90dvh; }
+    .cart-modal-header, .cart-modal-footer { padding: 12px 15px; }
+    .cart-modal-body { padding: 15px; }
+    .product-modal-overlay { padding: 10px; }
+    .product-modal {
+        padding: 18px 14px;
+        max-height: 92vh;
+        max-height: 92dvh;
+    }
+    .product-modal-content { gap: 16px; }
+    .product-modal-gallery img { max-height: 220px; }
+    .product-modal-info h2 { font-size: 19px; padding-right: 24px; }
+    .modal-price { font-size: 22px; }
+    .similar-products-grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* Сторінки чекаут / вхід / обране */
+    .checkout-container, .wishlist-container { padding: 18px 12px; }
+    .checkout-title { font-size: 22px; margin-bottom: 16px; }
+    .checkout-layout { gap: 16px; }
+    .form-section, .order-summary { padding: 15px; }
+    .form-group input, .form-group select { font-size: 16px; }
+    .auth-page-container { padding: 25px 12px; }
+    .auth-card, .auth-container { padding: 22px 18px; }
+}
+
+/* ---------- Маленькі телефони ---------- */
+@media (max-width: 480px) {
+    .container { padding-left: 10px; padding-right: 10px; }
+
+    .form-row { grid-template-columns: 1fr; gap: 0; }
+
+    .cart-item { flex-wrap: wrap; gap: 10px; }
+    .cart-item-info { flex: 1 1 calc(100% - 80px); }
+    .cart-modal-footer { flex-direction: column; align-items: stretch; gap: 12px; }
+    .checkout-btn { width: 100%; padding: 12px; }
+    .cart-total { text-align: center; }
+
+    .modal-product-price-block { flex-direction: column; align-items: stretch; gap: 12px; }
+    .main-buy-btn { justify-content: center; }
+
+    .social-auth-btns { grid-template-columns: 1fr; }
+    .auth-options { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+    .tech-specs-list li { flex-direction: column; gap: 2px; }
+}
+
+/* Дуже вузькі екрани (до 360px) */
+@media (max-width: 360px) {
+    .product-card img { height: 90px; }
+    .product-title { font-size: 12px; }
+    .price { font-size: 14px; }
+    .user-actions { gap: 8px; }
+}

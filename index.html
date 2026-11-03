@@ -97,8 +97,11 @@
 
         <div class="main-layout" id="catalog">
             
+            <!-- Кнопка фільтрів (видима тільки на телефоні) -->
+            <button type="button" class="filters-toggle" id="filters-toggle"><i class="fa-solid fa-sliders"></i> Фільтри</button>
+
             <!-- Sidebar -->
-            <aside class="sidebar">
+            <aside class="sidebar" id="sidebar">
                 <h3 class="filter-title">Фільтри</h3>
 
                 <div class="filter-group">
@@ -346,6 +349,22 @@
             if (CAT_NAMES[cat]) items.push({ label: CAT_NAMES[cat], onClick: () => showCategory(cat) });
             items.push({ label: title });
             render($('modal-breadcrumbs'), items);
+        });
+    })();
+    </script>
+    <script>
+    // Фільтри на телефоні: за замовчуванням згорнуті, кнопка розгортає
+    (function () {
+        document.addEventListener('DOMContentLoaded', function () {
+            var btn = document.getElementById('filters-toggle');
+            var sidebar = document.getElementById('sidebar');
+            if (!btn || !sidebar) return;
+            if (window.matchMedia('(max-width: 768px)').matches) {
+                sidebar.classList.add('filters-collapsed');
+            }
+            btn.addEventListener('click', function () {
+                sidebar.classList.toggle('filters-collapsed');
+            });
         });
     })();
     </script>
