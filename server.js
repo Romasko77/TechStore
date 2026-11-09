@@ -56,6 +56,45 @@ async function initDB() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Замовлення, склад замовлень і відгуки
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                user_name VARCHAR(150),
+                full_name VARCHAR(150) NOT NULL,
+                phone VARCHAR(40) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                city VARCHAR(100) NOT NULL,
+                delivery_method VARCHAR(30) NOT NULL,
+                address VARCHAR(300) NOT NULL,
+                payment_method VARCHAR(30) NOT NULL,
+                total NUMERIC(12, 2) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'new',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS order_items (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+                product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+                title VARCHAR(255) NOT NULL,
+                color VARCHAR(50),
+                memory VARCHAR(50),
+                unit_price NUMERIC(10, 2) NOT NULL,
+                quantity INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+            CREATE TABLE IF NOT EXISTS reviews (
+                id SERIAL PRIMARY KEY,
+                product_id VARCHAR(50) NOT NULL,
+                author VARCHAR(100) NOT NULL,
+                rating SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+                text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id);
+        `);
         await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50)');
         const missing = await pool.query('SELECT id, name FROM products WHERE category IS NULL');
         for (const row of missing.rows) {
@@ -407,6 +446,232 @@ app.get('/api/get-replies/:userId', async (req, res) => {
         console.error('Помилка отримання повідомлень з БД:', err.message);
         res.json({ replies: [] });
     }
+});
+
+// === ЗАМОВЛЕННЯ ТА ВІДГУКИ ===
+const ORDER_STATUSES = ['new', 'processing', 'shipped', 'completed', 'cancelled'];
+const DELIVERY_METHODS = ['nova-poshta', 'courier', 'pickup'];
+const PAYMENT_METHODS = ['card', 'postpaid'];
+const MAX_OPTION_SURCHARGE = 10000; // максимальна доплата за опції (пам'ять тощо), яку додає сайт до ціни
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// Простий обмежувач частоти запитів за IP (зберігається в пам'яті сервера)
+const rateBuckets = new Map();
+function rateLimit(name, max, windowMs) {
+    return (req, res, next) => {
+        const key = `${name}:${req.ip}`;
+        const now = Date.now();
+        let bucket = rateBuckets.get(key);
+        if (!bucket || bucket.resetAt < now) bucket = { count: 0, resetAt: now + windowMs };
+        bucket.count += 1;
+        rateBuckets.set(key, bucket);
+        if (bucket.count > max) return res.status(429).json({ error: 'Забагато запитів. Спробуйте пізніше' });
+        next();
+    };
+}
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of rateBuckets) if (bucket.resetAt < now) rateBuckets.delete(key);
+}, 10 * 60 * 1000).unref();
+
+// Перевірка складу замовлення: товари шукаємо в базі і не даємо занизити ціну
+async function buildOrderItems(client, rawItems) {
+    const items = [];
+    for (const it of rawItems) {
+        const quantity = Number(it?.quantity);
+        const price = Number(it?.price);
+        const title = String(it?.title ?? '').trim().slice(0, 255);
+        if (!title || !Number.isInteger(quantity) || quantity < 1 || quantity > 99 || !Number.isFinite(price) || price < 0) {
+            return { error: 'Некоректний склад замовлення. Оновіть кошик' };
+        }
+
+        // Шукаємо товар у базі: за id, а якщо id не числовий (картки "Популярні товари") - за назвою
+        let product = null;
+        const idStr = String(it?.id ?? '');
+        if (/^\d{1,9}$/.test(idStr)) {
+            product = (await client.query('SELECT id, name, price FROM products WHERE id = $1', [Number(idStr)])).rows[0];
+        }
+        if (!product) {
+            product = (await client.query('SELECT id, name, price FROM products WHERE name = $1 LIMIT 1', [title])).rows[0];
+        }
+        if (product) {
+            const base = Number(product.price);
+            if (price < base || price > base + MAX_OPTION_SURCHARGE) {
+                return { error: `Ціна товару «${product.name}» змінилася. Оновіть кошик` };
+            }
+        }
+
+        items.push({
+            productId: product ? product.id : null,
+            title: product ? product.name : title,
+            color: it?.color ? String(it.color).slice(0, 50) : null,
+            memory: it?.memory ? String(it.memory).slice(0, 50) : null,
+            unitPrice: round2(price),
+            quantity
+        });
+    }
+    return { items };
+}
+
+// Створення замовлення
+app.post('/api/orders', rateLimit('orders', 10, 60 * 60 * 1000), async (req, res) => {
+    const b = req.body || {};
+    const fullName = String(b.fullName ?? '').trim();
+    const phone = String(b.phone ?? '').trim();
+    const email = String(b.email ?? '').trim();
+    const city = String(b.city ?? '').trim();
+    const address = String(b.address ?? '').trim();
+    const deliveryMethod = String(b.deliveryMethod ?? '');
+    const paymentMethod = String(b.paymentMethod ?? '');
+    const userName = b.userName ? String(b.userName).trim().slice(0, 150) : null;
+    const rawItems = Array.isArray(b.items) ? b.items : [];
+
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (fullName.length < 3 || fullName.length > 150 || /\d/.test(fullName)) return res.status(400).json({ error: 'Введіть коректне ПІБ (без цифр)' });
+    if (phoneDigits.length < 10 || phoneDigits.length > 15 || phone.length > 40) return res.status(400).json({ error: 'Введіть коректний номер телефону' });
+    if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Введіть коректну електронну пошту' });
+    if (city.length < 2 || city.length > 100 || /\d/.test(city)) return res.status(400).json({ error: 'Вкажіть коректне місто доставки' });
+    if (!address || address.length > 300) return res.status(400).json({ error: 'Вкажіть відділення або адресу доставки' });
+    if (!DELIVERY_METHODS.includes(deliveryMethod)) return res.status(400).json({ error: 'Оберіть спосіб доставки' });
+    if (!PAYMENT_METHODS.includes(paymentMethod)) return res.status(400).json({ error: 'Оберіть спосіб оплати' });
+    if (!rawItems.length || rawItems.length > 50) return res.status(400).json({ error: 'Кошик порожній' });
+
+    const client = await pool.connect();
+    try {
+        const built = await buildOrderItems(client, rawItems);
+        if (built.error) return res.status(400).json({ error: built.error });
+
+        const total = round2(built.items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0));
+
+        await client.query('BEGIN');
+        const orderResult = await client.query(
+            `INSERT INTO orders (user_name, full_name, phone, email, city, delivery_method, address, payment_method, total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+            [userName, fullName, phone, email, city, deliveryMethod, address, paymentMethod, total]
+        );
+        const orderId = orderResult.rows[0].id;
+        for (const i of built.items) {
+            await client.query(
+                `INSERT INTO order_items (order_id, product_id, title, color, memory, unit_price, quantity)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [orderId, i.productId, i.title, i.color, i.memory, i.unitPrice, i.quantity]
+            );
+        }
+        await client.query('COMMIT');
+
+        res.status(201).json({ success: true, orderId, total });
+
+        // Сповіщення менеджеру в Telegram (у фоні, звичайним текстом)
+        if (adminChatId && TELEGRAM_BOT_TOKEN) {
+            const lines = built.items.map(i => `• ${i.title}${i.memory ? ' (' + i.memory + ')' : ''} × ${i.quantity} = ${round2(i.unitPrice * i.quantity)} ₴`);
+            const text = `🛒 Нове замовлення №${orderId}\n👤 ${fullName}\n📞 ${phone}\n✉️ ${email}\n📍 ${city}, ${address}\n🚚 ${deliveryMethod} / 💳 ${paymentMethod}\n\n${lines.join('\n')}\n\nРазом: ${total} ₴`;
+            telegramRequest('sendMessage', { chat_id: adminChatId, text }).catch(e => console.error('Telegram:', e.message));
+        }
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        console.error('Помилка створення замовлення:', err.message);
+        if (!res.headersSent) res.status(500).json({ error: 'Не вдалося оформити замовлення. Спробуйте ще раз' });
+    } finally {
+        client.release();
+    }
+});
+
+// Відгуки до товару
+app.get('/api/reviews/:productId', async (req, res) => {
+    const productId = String(req.params.productId);
+    if (!/^[A-Za-z0-9_-]{1,50}$/.test(productId)) return res.status(400).json({ error: 'Некоректний id товару' });
+    try {
+        const result = await pool.query(
+            'SELECT id, author, rating, text, created_at FROM reviews WHERE product_id = $1 ORDER BY id DESC LIMIT 100',
+            [productId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Помилка отримання відгуків:', err.message);
+        res.status(500).json({ error: 'Помилка сервера' });
+    }
+});
+
+app.post('/api/reviews', rateLimit('reviews', 8, 60 * 60 * 1000), async (req, res) => {
+    const productId = String(req.body?.productId ?? '');
+    const author = String(req.body?.author ?? '').trim();
+    const text = String(req.body?.text ?? '').trim();
+    const rating = Number(req.body?.rating);
+    if (!/^[A-Za-z0-9_-]{1,50}$/.test(productId)) return res.status(400).json({ error: 'Некоректний id товару' });
+    if (!author || author.length > 100) return res.status(400).json({ error: 'Некоректне ім\'я автора' });
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Оцінка має бути від 1 до 5' });
+    if (!text || text.length > 1000) return res.status(400).json({ error: 'Текст відгуку: від 1 до 1000 символів' });
+    try {
+        const result = await pool.query(
+            'INSERT INTO reviews (product_id, author, rating, text) VALUES ($1, $2, $3, $4) RETURNING id, author, rating, text, created_at',
+            [productId, author, rating, text]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Помилка збереження відгуку:', err.message);
+        res.status(500).json({ error: 'Помилка сервера' });
+    }
+});
+
+// --- Адмін: замовлення та відгуки (потрібен той самий вхід, що й для товарів) ---
+app.get('/api/admin/orders', requireAdmin, async (req, res) => {
+    const status = ORDER_STATUSES.includes(req.query.status) ? req.query.status : null;
+    try {
+        const result = await pool.query(
+            `SELECT o.*,
+                    COALESCE(json_agg(json_build_object(
+                        'product_id', i.product_id, 'title', i.title, 'color', i.color,
+                        'memory', i.memory, 'unit_price', i.unit_price, 'quantity', i.quantity
+                    ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
+             FROM orders o
+             LEFT JOIN order_items i ON i.order_id = o.id
+             WHERE ($1::text IS NULL OR o.status = $1)
+             GROUP BY o.id
+             ORDER BY o.id DESC
+             LIMIT 200`,
+            [status]
+        );
+        res.json(result.rows);
+    } catch (err) { adminError(res, err); }
+});
+
+app.patch('/api/admin/orders/:id/status', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const status = String(req.body?.status ?? '');
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    if (!ORDER_STATUSES.includes(status)) return res.status(400).json({ error: 'Некоректний статус' });
+    try {
+        const result = await pool.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING id, status', [status, id]);
+        if (!result.rows.length) return res.status(404).json({ error: 'Замовлення не знайдено' });
+        res.json(result.rows[0]);
+    } catch (err) { adminError(res, err); }
+});
+
+app.delete('/api/admin/orders/:id', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    try {
+        const result = await pool.query('DELETE FROM orders WHERE id = $1', [id]);
+        if (!result.rowCount) return res.status(404).json({ error: 'Замовлення не знайдено' });
+        res.json({ success: true });
+    } catch (err) { adminError(res, err); }
+});
+
+app.get('/api/admin/reviews', requireAdmin, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, product_id, author, rating, text, created_at FROM reviews ORDER BY id DESC LIMIT 200');
+        res.json(result.rows);
+    } catch (err) { adminError(res, err); }
+});
+
+app.delete('/api/admin/reviews/:id', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    try {
+        const result = await pool.query('DELETE FROM reviews WHERE id = $1', [id]);
+        if (!result.rowCount) return res.status(404).json({ error: 'Відгук не знайдено' });
+        res.json({ success: true });
+    } catch (err) { adminError(res, err); }
 });
 
 const PORT = process.env.PORT || 3000;

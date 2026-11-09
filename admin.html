@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>TechStore: керування товарами</title>
+<title>TechStore: адмін-панель</title>
 <style>
 :root { --green:#27ae60; --ink:#1d2321; --muted:#6b7570; --bg:#f3f5f4; --line:#dde2df; --red:#c0392b; --warn:#fff6dc; }
 * { box-sizing: border-box; }
@@ -41,7 +41,32 @@ td.actions { white-space:nowrap; display:flex; gap:6px; flex-direction:column; }
 textarea { resize:vertical; min-height:56px; }
 #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); padding:10px 18px; border-radius:8px; color:#fff; background:var(--green); box-shadow:0 4px 14px #0003; }
 #toast.bad { background:var(--red); }
-@media (max-width:700px) { .add-grid { grid-template-columns:1fr; } main { padding:12px; } }
+.tabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+.tab-btn { background:#fff; color:var(--ink); border:1px solid var(--line); }
+.tab-btn.active { background:var(--green); color:#fff; border-color:var(--green); }
+.badge { display:inline-block; min-width:20px; padding:0 6px; margin-left:6px; border-radius:10px; background:var(--red); color:#fff; font-size:12px; line-height:20px; text-align:center; }
+.filters { display:flex; gap:12px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.filters select { width:auto; min-width:180px; }
+.empty { color:var(--muted); padding:16px 0; }
+.order { border:1px solid var(--line); border-left:5px solid var(--muted); border-radius:8px; padding:14px; margin-bottom:12px; background:#fff; }
+.order[data-status="new"] { border-left-color:#e67e22; }
+.order[data-status="processing"] { border-left-color:#2980b9; }
+.order[data-status="shipped"] { border-left-color:#8e44ad; }
+.order[data-status="completed"] { border-left-color:var(--green); }
+.order[data-status="cancelled"] { border-left-color:var(--red); opacity:.75; }
+.order-head { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.order-head .grow { flex:1; color:var(--muted); font-size:13px; }
+.order-head select { width:auto; }
+.order-info { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:6px 18px; margin-bottom:10px; font-size:14px; }
+.order-info b { color:var(--muted); font-weight:600; font-size:12px; display:block; }
+.order-items { list-style:none; margin:0 0 10px; padding:0; border-top:1px solid var(--line); }
+.order-items li { display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.order-total { text-align:right; font-weight:700; }
+.review-row { display:flex; gap:14px; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--line); }
+.review-row .meta { font-size:13px; color:var(--muted); margin-bottom:3px; }
+.review-row .stars { color:#f39c12; }
+.review-row p { margin:0; word-break:break-word; }
+@media (max-width:700px) { .add-grid { grid-template-columns:1fr; } main { padding:12px; } header { padding:12px; } header h1 { font-size:16px; } .review-row { flex-direction:column; } }
 </style>
 </head>
 <body>
@@ -58,10 +83,17 @@ textarea { resize:vertical; min-height:56px; }
 
 <div id="panel-view" class="hidden">
   <header>
-    <h1>Tech<span>Store</span>: керування товарами</h1>
+    <h1>Tech<span>Store</span>: адмін-панель</h1>
     <button class="ghost" id="logout-btn" type="button">Вийти</button>
   </header>
   <main>
+    <nav class="tabs" aria-label="Розділи адмін-панелі">
+      <button type="button" class="tab-btn active" data-tab="products">Товари</button>
+      <button type="button" class="tab-btn" data-tab="orders">Замовлення<span id="orders-badge" class="badge hidden"></span></button>
+      <button type="button" class="tab-btn" data-tab="reviews">Відгуки</button>
+    </nav>
+
+    <div id="tab-products">
     <section class="panel">
       <h2>Додати товар</h2>
       <form id="add-form" class="add-grid">
@@ -87,6 +119,28 @@ textarea { resize:vertical; min-height:56px; }
         </table>
       </div>
     </section>
+    </div>
+
+    <div id="tab-orders" class="hidden">
+      <section class="panel">
+        <div class="filters">
+          <h2 style="margin:0">Замовлення <span id="orders-count" style="color:var(--muted);font-weight:400"></span></h2>
+          <select id="orders-filter" aria-label="Фільтр за статусом"></select>
+          <button type="button" id="orders-refresh">Оновити</button>
+        </div>
+        <div id="orders-list"></div>
+      </section>
+    </div>
+
+    <div id="tab-reviews" class="hidden">
+      <section class="panel">
+        <div class="filters">
+          <h2 style="margin:0">Відгуки <span id="reviews-count" style="color:var(--muted);font-weight:400"></span></h2>
+          <button type="button" id="reviews-refresh">Оновити</button>
+        </div>
+        <div id="reviews-list"></div>
+      </section>
+    </div>
   </main>
 </div>
 
@@ -133,7 +187,9 @@ textarea { resize:vertical; min-height:56px; }
     $('login-view').classList.add('hidden');
     $('panel-view').classList.remove('hidden');
     fillCategories($('a-cat'), 'laptops');
+    showTab('products');
     loadProducts();
+    loadOrders();
   }
 
   function logout(message) {
@@ -228,6 +284,153 @@ textarea { resize:vertical; min-height:56px; }
       toast('Товар додано');
     } catch (err) { toast(err.message, false); }
   });
+
+
+  // ===== Вкладки, замовлення та відгуки =====
+  const STATUSES = { new:'Нове', processing:'В обробці', shipped:'Відправлено', completed:'Виконано', cancelled:'Скасовано' };
+  const DELIVERY = { 'nova-poshta':'Нова Пошта (відділення)', courier:"Кур'єрська доставка", pickup:'Самовивіз з магазину' };
+  const PAYMENT = { card:'Карткою на сайті', postpaid:'При отриманні' };
+  let orders = [];
+  let reviews = [];
+
+  // Створення елементів без innerHTML: дані від покупців завжди вставляються як текст
+  function el(tag, props, ...children) {
+    const node = Object.assign(document.createElement(tag), props || {});
+    node.append(...children);
+    return node;
+  }
+  const money = (n) => Number(n).toLocaleString('uk-UA') + ' ₴';
+  const when = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('uk-UA'); };
+
+  function showTab(name) {
+    for (const t of ['products', 'orders', 'reviews']) $('tab-' + t).classList.toggle('hidden', t !== name);
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    if (name === 'orders') loadOrders();
+    if (name === 'reviews') loadReviews();
+  }
+
+  function updateOrdersBadge() {
+    const fresh = orders.filter(o => o.status === 'new').length;
+    const badge = $('orders-badge');
+    badge.textContent = fresh;
+    badge.classList.toggle('hidden', fresh === 0);
+  }
+
+  async function loadOrders() {
+    try {
+      orders = await api('/api/admin/orders');
+      updateOrdersBadge();
+      renderOrders();
+    } catch (err) { toast(err.message, false); }
+  }
+
+  function renderOrders() {
+    const filter = $('orders-filter').value;
+    const list = orders.filter(o => !filter || o.status === filter);
+    $('orders-count').textContent = '(' + list.length + ' з ' + orders.length + ')';
+    $('orders-list').replaceChildren(...(list.length ? list.map(makeOrder) : [el('p', { className:'empty', textContent:'Замовлень немає' })]));
+  }
+
+  function makeOrder(o) {
+    const card = el('div', { className:'order' });
+    card.dataset.status = o.status;
+
+    const statusSel = el('select', { 'aria-label':'Статус замовлення' });
+    for (const [value, label] of Object.entries(STATUSES)) statusSel.append(new Option(label, value));
+    statusSel.value = o.status;
+    statusSel.addEventListener('change', async () => {
+      statusSel.disabled = true;
+      try {
+        const res = await api('/api/admin/orders/' + o.id + '/status', { method:'PATCH', body: JSON.stringify({ status: statusSel.value }) });
+        o.status = res.status;
+        card.dataset.status = o.status;
+        updateOrdersBadge();
+        toast('Статус замовлення №' + o.id + ' змінено');
+      } catch (err) { statusSel.value = o.status; toast(err.message, false); }
+      statusSel.disabled = false;
+    });
+
+    const del = el('button', { type:'button', className:'danger', textContent:'Видалити' });
+    del.addEventListener('click', async () => {
+      if (!confirm('Видалити замовлення №' + o.id + '? Це не можна скасувати.')) return;
+      try {
+        await api('/api/admin/orders/' + o.id, { method:'DELETE' });
+        orders = orders.filter(x => x.id !== o.id);
+        updateOrdersBadge();
+        renderOrders();
+        toast('Замовлення видалено');
+      } catch (err) { toast(err.message, false); }
+    });
+
+    const head = el('div', { className:'order-head' },
+      el('strong', { textContent:'Замовлення №' + o.id }),
+      el('span', { className:'grow', textContent: when(o.created_at) }),
+      statusSel, del);
+
+    const field = (label, value) => el('div', {}, el('b', { textContent: label }), value);
+    const phoneLink = el('a', { textContent: o.phone, href: 'tel:' + String(o.phone).replace(/[^\d+]/g, '') });
+    const mailLink = el('a', { textContent: o.email, href: 'mailto:' + o.email });
+    const info = el('div', { className:'order-info' },
+      field('Покупець', o.full_name + (o.user_name ? ' (акаунт: ' + o.user_name + ')' : '')),
+      field('Телефон', phoneLink),
+      field('Пошта', mailLink),
+      field('Місто', o.city),
+      field('Доставка', (DELIVERY[o.delivery_method] || o.delivery_method) + ': ' + o.address),
+      field('Оплата', PAYMENT[o.payment_method] || o.payment_method));
+
+    const items = el('ul', { className:'order-items' }, ...(o.items || []).map(i => {
+      const name = i.title + (i.memory ? ' (' + i.memory + ')' : '') + (i.color ? ', ' + i.color : '');
+      return el('li', {},
+        el('span', { textContent: name + (i.product_id ? '' : ' (товару немає в базі)') }),
+        el('span', { textContent: i.quantity + ' × ' + money(i.unit_price) + ' = ' + money(i.quantity * i.unit_price) }));
+    }));
+
+    card.append(head, info, items, el('div', { className:'order-total', textContent:'Разом: ' + money(o.total) }));
+    return card;
+  }
+
+  async function loadReviews() {
+    try {
+      reviews = await api('/api/admin/reviews');
+      renderReviewsList();
+    } catch (err) { toast(err.message, false); }
+  }
+
+  function renderReviewsList() {
+    $('reviews-count').textContent = '(' + reviews.length + ')';
+    $('reviews-list').replaceChildren(...(reviews.length ? reviews.map(makeReview) : [el('p', { className:'empty', textContent:'Відгуків немає' })]));
+  }
+
+  function makeReview(r) {
+    const product = products.find(p => String(p.id) === String(r.product_id));
+    const productName = product ? product.name : 'товар ' + r.product_id;
+    const rating = Math.min(5, Math.max(0, Number(r.rating) || 0));
+    const del = el('button', { type:'button', className:'danger', textContent:'Видалити' });
+    del.addEventListener('click', async () => {
+      if (!confirm('Видалити цей відгук?')) return;
+      try {
+        await api('/api/admin/reviews/' + r.id, { method:'DELETE' });
+        reviews = reviews.filter(x => x.id !== r.id);
+        renderReviewsList();
+        toast('Відгук видалено');
+      } catch (err) { toast(err.message, false); }
+    });
+    return el('div', { className:'review-row' },
+      el('div', {},
+        el('div', { className:'meta' },
+          el('strong', { textContent: r.author }), ' · ',
+          el('span', { className:'stars', textContent: '★'.repeat(rating) + '☆'.repeat(5 - rating) }),
+          ' · ' + when(r.created_at) + ' · ' + productName),
+        el('p', { textContent: r.text })),
+      del);
+  }
+
+  $('orders-filter').append(new Option('Усі статуси', ''));
+  for (const [value, label] of Object.entries(STATUSES)) $('orders-filter').append(new Option(label, value));
+  $('orders-filter').addEventListener('change', renderOrders);
+  $('orders-refresh').addEventListener('click', loadOrders);
+  $('reviews-refresh').addEventListener('click', loadReviews);
+  document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
   $('search').addEventListener('input', renderRows);
   $('logout-btn').addEventListener('click', () => logout(''));

@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Перевірка при відправці форми
     if (checkoutForm) {
-        checkoutForm.addEventListener('submit', (e) => {
+        checkoutForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             if (cart.length === 0) {
@@ -181,13 +181,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Якщо всі перевірки пройдені успішно
-            showNotification(`Дякуємо за замовлення, ${fullName}! Менеджер зв'яжеться з вами.`, false);
+            // Відправляємо замовлення на сервер (зберігається в базі Neon)
+            const submitBtn = checkoutForm.querySelector('.submit-order-btn');
+            const submitBtnText = submitBtn ? submitBtn.textContent : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Відправляємо...';
+            }
 
-            localStorage.removeItem('techstore_cart');
-            setTimeout(() => {
-                window.location.href = 'index.html';
-            }, 2000);
+            const deliveryEl = document.getElementById('delivery-method');
+            const paymentEl = checkoutForm.querySelector('input[name="payment"]:checked');
+            const payload = {
+                userName: savedUser || null,
+                fullName,
+                phone,
+                email,
+                city,
+                address,
+                deliveryMethod: deliveryEl ? deliveryEl.value : '',
+                paymentMethod: paymentEl ? paymentEl.value : '',
+                items: cart.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    price: parseFloat(item.price) || 0,
+                    quantity: parseInt(item.quantity) || 1,
+                    color: item.color || null,
+                    memory: item.memory || null
+                }))
+            };
+
+            try {
+                const response = await fetch('/api/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || 'Не вдалося оформити замовлення');
+
+                showNotification(`Дякуємо за замовлення №${data.orderId}, ${fullName}! Менеджер зв'яжеться з вами.`, false);
+                localStorage.removeItem('techstore_cart');
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 2500);
+            } catch (err) {
+                // Кошик не чистимо, щоб користувач міг спробувати ще раз
+                const msg = err instanceof TypeError ? 'Немає зв\'язку із сервером. Спробуйте ще раз.' : err.message;
+                showNotification('❌ ' + msg, true);
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = submitBtnText;
+                }
+            }
         });
     }
 

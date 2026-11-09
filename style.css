@@ -1617,3 +1617,71 @@ img { max-width: 100%; }
     .price { font-size: 14px; }
     .user-actions { gap: 8px; }
 }
+
+/* =====================================================
+   Вікно товару на телефоні: картка і відгуки в одну колонку
+   ===================================================== */
+@media (max-width: 768px) {
+    .product-modal-overlay {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 10px;
+        padding: 10px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    /* Усі блоки всередині оверлея (картка товару, відгуки) - на всю ширину */
+    .product-modal-overlay > * {
+        width: 100%;
+        max-width: 100%;
+        flex-shrink: 0;
+    }
+    .product-modal {
+        max-height: none;
+        padding: 46px 14px 18px; /* зверху місце під хрестик */
+    }
+    .product-modal .close-modal-btn {
+        top: 8px;
+        right: 12px;
+        width: 36px;
+        height: 36px;
+        line-height: 1;
+    }
+}
+
+/* =====================================================
+   Чат-бот, сповіщення і відступ знизу на телефоні
+   (!important потрібен, бо стилі чату задані прямо в script.js)
+   ===================================================== */
+@media (max-width: 768px) {
+    #tech-bot-toggle {
+        width: 46px !important;
+        height: 46px !important;
+        font-size: 20px !important;
+        bottom: 14px !important;
+        right: 12px !important;
+    }
+    #tech-bot-window {
+        width: calc(100vw - 24px) !important;
+        max-width: 360px !important;
+        height: 60vh !important;
+        max-height: 420px !important;
+        right: 12px !important;
+        bottom: 68px !important;
+    }
+    #toast-notification {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: 72px !important;
+        text-align: center;
+    }
+    /* Щоб нижні картки товарів не ховалися під кнопкою чату */
+    body { padding-bottom: 70px; }
+    .auth-page { padding-bottom: 16px; }
+
+    /* Відгуки у вікні товару */
+    #modal-reviews-section { margin-top: 18px !important; padding: 12px 0 !important; }
+    #reviews-list { max-height: 240px !important; }
+    #review-user-text, #review-user-name { font-size: 16px !important; }
+}
