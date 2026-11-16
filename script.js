@@ -45,6 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const userNameDisplay = document.getElementById('user-name-display');
     const userBtn = document.getElementById('user-btn');
     const logoutBtn = document.getElementById('logout-btn');
+    // Ім'я без токена - залишок старого "несправжнього" входу: вважаємо, що користувач не увійшов
+    if (localStorage.getItem('techstore_user') && !localStorage.getItem('techstore_token')) {
+        localStorage.removeItem('techstore_user');
+    }
     const activeUser = localStorage.getItem('techstore_user');
 
     if (activeUser) {
@@ -60,9 +64,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             localStorage.removeItem('techstore_user');
+            localStorage.removeItem('techstore_token');
             showNotification('Ви успішно вийшли з облікового запису');
             setTimeout(() => window.location.reload(), 1000);
         });
+    }
+
+    // Перевіряємо, що сесія ще дійсна (токен міг закінчитися)
+    const savedToken = localStorage.getItem('techstore_token');
+    if (savedToken) {
+        fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + savedToken } })
+            .then(r => {
+                if (r.status === 401) {
+                    localStorage.removeItem('techstore_token');
+                    localStorage.removeItem('techstore_user');
+                    window.location.reload();
+                }
+            })
+            .catch(() => {});
     }
 
     // Стан кошика, обраного та відгуків
@@ -366,15 +385,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         const response = await fetch('/api/reviews', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: 'Bearer ' + (localStorage.getItem('techstore_token') || '')
+                            },
                             body: JSON.stringify({
                                 productId: String(productId),
-                                author: currentUser,
                                 rating: currentRating,
                                 text: textInput
                             })
                         });
                         const data = await response.json().catch(() => ({}));
+                        if (response.status === 401) {
+                            localStorage.removeItem('techstore_token');
+                            localStorage.removeItem('techstore_user');
+                            throw new Error('Сесія завершилась. Увійдіть в акаунт знову.');
+                        }
                         if (!response.ok) throw new Error(data.error || 'Не вдалося надіслати відгук');
                         showNotification('Дякуємо за ваш відгук!');
                         renderReviews(productId);

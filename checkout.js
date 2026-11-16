@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Отримуємо збережені дані про користувача та кошик
     const cart = JSON.parse(localStorage.getItem('techstore_cart')) || [];
-    const savedUser = localStorage.getItem('techstore_user');
+    const savedUser = localStorage.getItem('techstore_token') ? localStorage.getItem('techstore_user') : null;
 
     // Блок сповіщення про авторизацію
     const checkoutSection = document.querySelector('.checkout-section');
@@ -213,7 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const response = await fetch('/api/orders', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(localStorage.getItem('techstore_token') ? { Authorization: 'Bearer ' + localStorage.getItem('techstore_token') } : {})
+                    },
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json().catch(() => ({}));

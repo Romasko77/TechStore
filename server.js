@@ -56,6 +56,17 @@ async function initDB() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        // Зареєстровані користувачі (пароль зберігається лише у вигляді хешу)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(255) NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         // Замовлення, склад замовлень і відгуки
         await pool.query(`
             CREATE TABLE IF NOT EXISTS orders (
@@ -95,6 +106,8 @@ async function initDB() {
             );
             CREATE INDEX IF NOT EXISTS idx_reviews_product ON reviews(product_id);
         `);
+        // Зв'язок замовлення з акаунтом (для гостей залишається порожнім)
+        await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
         await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(50)');
         const missing = await pool.query('SELECT id, name FROM products WHERE category IS NULL');
         for (const row of missing.rows) {
@@ -448,6 +461,145 @@ app.get('/api/get-replies/:userId', async (req, res) => {
     }
 });
 
+// === АВТОРИЗАЦІЯ КОРИСТУВАЧІВ ===
+const scryptAsync = require('util').promisify(crypto.scrypt);
+
+// Ключ для підпису токенів входу. Краще задати SESSION_SECRET у Render (довгий випадковий рядок)
+const SESSION_SECRET = process.env.SESSION_SECRET
+    || crypto.createHash('sha256').update('techstore-session:' + (process.env.DATABASE_URL || 'dev')).digest('hex');
+if (!process.env.SESSION_SECRET) console.warn('⚠️ SESSION_SECRET не задано: використовується запасний ключ. Додайте SESSION_SECRET у змінні середовища.');
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // токен діє 30 днів
+
+const AUTH_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const AUTH_NAME_RE = /^\p{L}[\p{L}\s'’-]{1,49}$/u;
+
+function validateName(name) {
+    if (!name) return 'Вкажіть ім’я';
+    if (!AUTH_NAME_RE.test(name)) return 'Ім’я може містити лише літери, пробіли, дефіс і апостроф (2–50 символів)';
+    return '';
+}
+function validateEmail(email) {
+    if (!email) return 'Вкажіть електронну пошту';
+    if (email.length > 255 || !AUTH_EMAIL_RE.test(email)) return 'Введіть коректну електронну пошту';
+    return '';
+}
+function validatePassword(password) {
+    if (!password) return 'Введіть пароль';
+    if (password.length < 8) return 'Пароль має містити щонайменше 8 символів';
+    if (password.length > 128) return 'Пароль занадто довгий (максимум 128 символів)';
+    if (!/\p{L}/u.test(password)) return 'Пароль має містити хоча б одну літеру';
+    if (!/\d/.test(password)) return 'Пароль має містити хоча б одну цифру';
+    return '';
+}
+
+// Хешування пароля: scrypt із випадковою сіллю (вбудований у Node, без сторонніх бібліотек)
+async function hashPassword(password) {
+    const salt = crypto.randomBytes(16);
+    const key = await scryptAsync(password, salt, 64);
+    return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
+}
+async function verifyPassword(password, stored) {
+    const [alg, saltHex, keyHex] = String(stored).split('$');
+    if (alg !== 'scrypt' || !saltHex || !keyHex) return false;
+    const key = await scryptAsync(password, Buffer.from(saltHex, 'hex'), 64);
+    const expected = Buffer.from(keyHex, 'hex');
+    return key.length === expected.length && crypto.timingSafeEqual(key, expected);
+}
+// Фіктивний хеш: щоб відповідь на неіснуючу пошту займала стільки ж часу, як і на хибний пароль
+let dummyHashPromise = null;
+function getDummyHash() {
+    if (!dummyHashPromise) dummyHashPromise = hashPassword('dummy-password-for-timing-1');
+    return dummyHashPromise;
+}
+
+function signSession(userId) {
+    const payload = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
+    const sig = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    return `${payload}.${sig}`;
+}
+function verifySession(token) {
+    if (typeof token !== 'string') return null;
+    const [payload, sig] = token.split('.');
+    if (!payload || !sig) return null;
+    const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+        const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        if (!Number.isInteger(data.uid) || typeof data.exp !== 'number' || data.exp < Date.now()) return null;
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function loadUserFromRequest(req) {
+    const header = req.headers.authorization || '';
+    const data = verifySession(header.startsWith('Bearer ') ? header.slice(7) : '');
+    if (!data) return null;
+    const result = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [data.uid]);
+    return result.rows[0] || null;
+}
+async function requireUser(req, res, next) {
+    try {
+        const user = await loadUserFromRequest(req);
+        if (!user) return res.status(401).json({ error: 'Потрібно увійти в акаунт' });
+        req.user = user;
+        next();
+    } catch (err) {
+        console.error('Помилка перевірки сесії:', err.message);
+        res.status(500).json({ error: 'Помилка сервера' });
+    }
+}
+
+app.post('/api/auth/register', rateLimit('register', 5, 60 * 60 * 1000), async (req, res) => {
+    const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    const password = String(req.body?.password ?? '');
+    const problem = validateName(name) || validateEmail(email) || validatePassword(password);
+    if (problem) return res.status(400).json({ error: problem });
+
+    try {
+        const hash = await hashPassword(password);
+        const result = await pool.query(
+            'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email',
+            [name, email, hash]
+        );
+        const user = result.rows[0];
+        res.status(201).json({ token: signSession(user.id), user });
+    } catch (err) {
+        if (err.code === '23505') return res.status(409).json({ error: 'Користувач із такою поштою вже зареєстрований' });
+        console.error('Помилка реєстрації:', err.message);
+        res.status(500).json({ error: 'Не вдалося зареєструватися. Спробуйте ще раз' });
+    }
+});
+
+app.post('/api/auth/login', rateLimit('login', 10, 15 * 60 * 1000), async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase();
+    const password = String(req.body?.password ?? '');
+    if (validateEmail(email) || !password || password.length > 128) {
+        return res.status(400).json({ error: 'Введіть пошту та пароль' });
+    }
+    try {
+        const result = await pool.query('SELECT id, name, email, password_hash FROM users WHERE email = $1', [email]);
+        const row = result.rows[0];
+        const ok = await verifyPassword(password, row ? row.password_hash : await getDummyHash());
+        if (!row || !ok) {
+            // Однакова відповідь і для хибної пошти, і для хибного пароля
+            return res.status(401).json({ error: 'Невірна пошта або пароль' });
+        }
+        res.json({ token: signSession(row.id), user: { id: row.id, name: row.name, email: row.email } });
+    } catch (err) {
+        console.error('Помилка входу:', err.message);
+        res.status(500).json({ error: 'Не вдалося увійти. Спробуйте ще раз' });
+    }
+});
+
+app.get('/api/auth/me', requireUser, (req, res) => {
+    res.json({ user: req.user });
+});
+
 // === ЗАМОВЛЕННЯ ТА ВІДГУКИ ===
 const ORDER_STATUSES = ['new', 'processing', 'shipped', 'completed', 'cancelled'];
 const DELIVERY_METHODS = ['nova-poshta', 'courier', 'pickup'];
@@ -536,6 +688,9 @@ app.post('/api/orders', rateLimit('orders', 10, 60 * 60 * 1000), async (req, res
     if (!PAYMENT_METHODS.includes(paymentMethod)) return res.status(400).json({ error: 'Оберіть спосіб оплати' });
     if (!rawItems.length || rawItems.length > 50) return res.status(400).json({ error: 'Кошик порожній' });
 
+    let account = null;
+    try { account = await loadUserFromRequest(req); } catch (e) { /* гість */ }
+
     const client = await pool.connect();
     try {
         const built = await buildOrderItems(client, rawItems);
@@ -545,9 +700,9 @@ app.post('/api/orders', rateLimit('orders', 10, 60 * 60 * 1000), async (req, res
 
         await client.query('BEGIN');
         const orderResult = await client.query(
-            `INSERT INTO orders (user_name, full_name, phone, email, city, delivery_method, address, payment_method, total)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-            [userName, fullName, phone, email, city, deliveryMethod, address, paymentMethod, total]
+            `INSERT INTO orders (user_id, user_name, full_name, phone, email, city, delivery_method, address, payment_method, total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+            [account ? account.id : null, account ? account.name : userName, fullName, phone, email, city, deliveryMethod, address, paymentMethod, total]
         );
         const orderId = orderResult.rows[0].id;
         for (const i of built.items) {
@@ -592,13 +747,12 @@ app.get('/api/reviews/:productId', async (req, res) => {
     }
 });
 
-app.post('/api/reviews', rateLimit('reviews', 8, 60 * 60 * 1000), async (req, res) => {
+app.post('/api/reviews', rateLimit('reviews', 8, 60 * 60 * 1000), requireUser, async (req, res) => {
     const productId = String(req.body?.productId ?? '');
-    const author = String(req.body?.author ?? '').trim();
+    const author = req.user.name; // автор береться з акаунта, а не з запиту
     const text = String(req.body?.text ?? '').trim();
     const rating = Number(req.body?.rating);
     if (!/^[A-Za-z0-9_-]{1,50}$/.test(productId)) return res.status(400).json({ error: 'Некоректний id товару' });
-    if (!author || author.length > 100) return res.status(400).json({ error: 'Некоректне ім\'я автора' });
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'Оцінка має бути від 1 до 5' });
     if (!text || text.length > 1000) return res.status(400).json({ error: 'Текст відгуку: від 1 до 1000 символів' });
     try {

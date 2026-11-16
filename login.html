@@ -14,37 +14,73 @@
         <nav class="breadcrumbs" aria-label="Хлібні крихти">
             <ol>
                 <li><a href="index.html">Головна</a></li>
-                <li><span aria-current="page">Вхід до кабінету</span></li>
+                <li><span aria-current="page" id="crumb-current">Вхід до кабінету</span></li>
             </ol>
         </nav>
         <div class="auth-header">
             <a href="index.html" class="logo">Tech<span>Store</span></a>
-            <h2>Вхід до кабінету</h2>
+            <h2 id="auth-title">Вхід до кабінету</h2>
         </div>
 
-        <form id="login-form" class="auth-form">
+        <div class="auth-tabs" role="tablist">
+            <button type="button" class="auth-tab active" id="tab-login" role="tab" aria-selected="true" aria-controls="login-form">Вхід</button>
+            <button type="button" class="auth-tab" id="tab-register" role="tab" aria-selected="false" aria-controls="register-form">Реєстрація</button>
+        </div>
+
+        <!-- Вхід -->
+        <form id="login-form" class="auth-form active" novalidate>
             <div class="form-group">
-                <label for="email">Електронна пошта *</label>
-                <input type="email" id="email" placeholder="example@mail.com" required>
+                <label for="login-email">Електронна пошта *</label>
+                <input type="email" id="login-email" autocomplete="email" inputmode="email" maxlength="255" placeholder="example@mail.com" aria-describedby="login-email-error">
+                <small class="field-error" id="login-email-error" role="alert"></small>
             </div>
 
             <div class="form-group">
-                <label for="password">Пароль *</label>
-                <input type="password" id="password" placeholder="••••••••" required>
+                <label for="login-password">Пароль *</label>
+                <div class="password-field">
+                    <input type="password" id="login-password" autocomplete="current-password" maxlength="128" placeholder="Ваш пароль" aria-describedby="login-password-error">
+                    <button type="button" class="password-toggle" data-target="login-password" aria-label="Показати пароль" aria-pressed="false"><i class="fa-regular fa-eye"></i></button>
+                </div>
+                <small class="field-error" id="login-password-error" role="alert"></small>
             </div>
 
+            <p class="form-message" id="login-message" role="alert"></p>
             <button type="submit" class="auth-submit-btn">Увійти</button>
+            <p class="auth-switch">Немає акаунта? <a href="#register" data-switch="register">Зареєструватися</a></p>
         </form>
 
-        <div class="divider">
-            <span>або увійти через</span>
-        </div>
+        <!-- Реєстрація -->
+        <form id="register-form" class="auth-form" novalidate>
+            <div class="form-group">
+                <label for="register-name">Ім’я *</label>
+                <input type="text" id="register-name" autocomplete="name" maxlength="50" placeholder="Ваше ім’я" aria-describedby="register-name-error">
+                <small class="field-error" id="register-name-error" role="alert"></small>
+            </div>
 
-        <div class="social-login">
-            <button type="button" class="google-btn" id="google-login-btn">
-                <i class="fa-brands fa-google"></i> Google
-            </button>
-        </div>
+            <div class="form-group">
+                <label for="register-email">Електронна пошта *</label>
+                <input type="email" id="register-email" autocomplete="email" inputmode="email" maxlength="255" placeholder="example@mail.com" aria-describedby="register-email-error">
+                <small class="field-error" id="register-email-error" role="alert"></small>
+            </div>
+
+            <div class="form-group">
+                <label for="register-password">Пароль *</label>
+                <div class="password-field">
+                    <input type="password" id="register-password" autocomplete="new-password" maxlength="128" placeholder="Придумайте пароль" aria-describedby="register-password-error password-rules">
+                    <button type="button" class="password-toggle" data-target="register-password" aria-label="Показати пароль" aria-pressed="false"><i class="fa-regular fa-eye"></i></button>
+                </div>
+                <ul class="password-rules" id="password-rules">
+                    <li data-rule="length">Щонайменше 8 символів</li>
+                    <li data-rule="letter">Містить літеру</li>
+                    <li data-rule="digit">Містить цифру</li>
+                </ul>
+                <small class="field-error" id="register-password-error" role="alert"></small>
+            </div>
+
+            <p class="form-message" id="register-message" role="alert"></p>
+            <button type="submit" class="auth-submit-btn">Зареєструватися</button>
+            <p class="auth-switch">Вже є акаунт? <a href="#login" data-switch="login">Увійти</a></p>
+        </form>
 
         <div class="auth-footer">
             <a href="index.html" class="back-to-home"><i class="fa-solid fa-arrow-left"></i> На головну</a>
