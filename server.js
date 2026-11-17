@@ -285,10 +285,13 @@ async function sendToTelegramAdmin(userId, userName, text) {
 // без правки коду: змінна середовища GEMINI_FALLBACK_MODELS (через кому) на Render.
 const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.6-flash,gemini-3.5-flash,gemini-flash-lite-latest')
     .split(',').map(m => m.trim()).filter(Boolean);
-const MODEL_TIMEOUT_MS = 12000;   // максимум очікування однієї спроби
-const MODEL_ATTEMPTS = 2;         // спроб на одну модель при тимчасових помилках
+const MODEL_TIMEOUT_MS = 8000;    // максимум очікування однієї спроби
+const MODEL_ATTEMPTS = 2;         // спроб на одну модель при швидких тимчасових помилках (503, 429)
 const RETRY_DELAY_MS = 1500;      // пауза між спробами
-const TOTAL_BUDGET_MS = 35000;    // загальний ліміт часу на всі спроби
+const TOTAL_BUDGET_MS = 24000;    // загальний ліміт часу на всі спроби (чат на сайті скасовує запит через 45 с)
+const MIN_ATTEMPT_MS = 1500;      // менше за цей залишок часу нову спробу не починаємо
+const AI_COOLDOWN_MS = 60000;     // після повного збою ШІ не чіпаємо цей час, щоб наступні повідомлення не чекали
+let aiUnavailableUntil = 0;
 
 function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
@@ -311,23 +314,38 @@ function isTemporaryError(err) {
 }
 
 async function generateWithRetry(ai, model, contents, config) {
+    // Нещодавній повний збій: не змушуємо користувачів чекати, одразу віддаємо запасну відповідь
+    if (Date.now() < aiUnavailableUntil) throw new Error('UNAVAILABLE: ШІ тимчасово недоступний (пауза після збоїв)');
+
     const models = [model, ...FALLBACK_MODELS.filter(m => m !== model)];
     const startedAt = Date.now();
     let lastError;
+    outer:
     for (const m of models) {
         for (let attempt = 1; attempt <= MODEL_ATTEMPTS; attempt++) {
-            if (Date.now() - startedAt > TOTAL_BUDGET_MS) throw lastError || new Error('timeout');
+            const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+            if (remaining < MIN_ATTEMPT_MS) break outer;
             try {
-                return await withTimeout(ai.models.generateContent({ model: m, contents, config }), MODEL_TIMEOUT_MS);
+                const result = await withTimeout(
+                    ai.models.generateContent({ model: m, contents, config }),
+                    Math.min(MODEL_TIMEOUT_MS, remaining)
+                );
+                aiUnavailableUntil = 0;
+                return result;
             } catch (err) {
                 lastError = err;
                 console.log(`⚠️ Модель ${m}, спроба ${attempt}/${MODEL_ATTEMPTS}: ${String(err.message).slice(0, 80)}`);
-                if (!isTemporaryError(err)) break;                  // не тимчасова помилка (наприклад, моделі немає) - одразу до наступної моделі
+                // Не тимчасова помилка (наприклад, моделі немає) або модель "зависла": одразу наступна модель
+                if (!isTemporaryError(err) || err.message === 'timeout') break;
                 if (attempt < MODEL_ATTEMPTS) await sleep(RETRY_DELAY_MS);
             }
         }
     }
-    throw lastError;
+    if (!lastError || isTemporaryError(lastError)) {
+        aiUnavailableUntil = Date.now() + AI_COOLDOWN_MS;
+        console.log(`⏸️ ШІ недоступний: наступна спроба через ${AI_COOLDOWN_MS / 1000} с`);
+    }
+    throw lastError || new Error('timeout');
 }
 
 // 1. Отримання повідомлення з сайту (ОБРОБКА ЧЕРЕЗ GEMINI AI)
@@ -397,7 +415,7 @@ app.post('/api/message', async (req, res) => {
     } catch (err) {
         console.error('Помилка обробки повідомлення ШІ:', err.message);
         
-        const fallbackReply = "Вибачте, наразі сталася технічна помилка. Ваше повідомлення передано менеджеру.";
+        const fallbackReply = "Вибачте, бот зараз перевантажений. Ваше повідомлення передано менеджеру, він відповість найближчим часом.";
         
         res.status(500).json({ error: 'Internal Server Error', reply: fallbackReply });
 
