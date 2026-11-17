@@ -225,7 +225,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 showNotification(`Дякуємо за замовлення №${data.orderId}, ${fullName}! Менеджер зв'яжеться з вами.`, false);
                 localStorage.removeItem('techstore_cart');
                 setTimeout(() => {
-                    window.location.href = 'index.html';
+                    // Авторизованого покупця ведемо в кабінет, де видно статус замовлення
+                    window.location.href = savedUser ? 'cabinet.html' : 'index.html';
                 }, 2500);
             } catch (err) {
                 // Кошик не чистимо, щоб користувач міг спробувати ще раз

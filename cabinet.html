@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Особистий кабінет — TechStore</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="breadcrumbs.css">
+    <link rel="stylesheet" href="cabinet.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="container header-container">
+            <a href="index.html" class="logo">Tech<span>Store</span></a>
+            <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> До каталогу</a>
+        </div>
+    </header>
+
+    <div class="container cabinet-container">
+        <nav class="breadcrumbs" aria-label="Хлібні крихти">
+            <ol>
+                <li><a href="index.html">Головна</a></li>
+                <li><span aria-current="page">Особистий кабінет</span></li>
+            </ol>
+        </nav>
+
+        <div class="cab-layout">
+            <!-- Бічна панель -->
+            <aside class="cab-sidebar">
+                <div class="cab-user">
+                    <div class="cab-avatar" id="cab-avatar" aria-hidden="true">?</div>
+                    <div class="cab-user-info">
+                        <strong id="cab-user-name">Завантаження...</strong>
+                        <span id="cab-user-email"></span>
+                    </div>
+                </div>
+
+                <nav class="cab-menu" aria-label="Розділи кабінету">
+                    <button type="button" class="cab-menu-btn active" data-tab="orders"><i class="fa-solid fa-box"></i> Мої замовлення <span class="cab-count" id="menu-orders-count" hidden></span></button>
+                    <button type="button" class="cab-menu-btn" data-tab="profile"><i class="fa-regular fa-user"></i> Особисті дані</button>
+                    <button type="button" class="cab-menu-btn" data-tab="security"><i class="fa-solid fa-lock"></i> Безпека</button>
+                    <a class="cab-menu-btn" href="wishlist.html"><i class="fa-regular fa-heart"></i> Список бажань</a>
+                    <button type="button" class="cab-menu-btn cab-logout" id="cab-logout"><i class="fa-solid fa-right-from-bracket"></i> Вийти</button>
+                </nav>
+            </aside>
+
+            <!-- Основна частина -->
+            <main class="cab-main">
+                <section class="cab-stats" id="cab-stats" aria-label="Статистика">
+                    <div class="cab-stat"><span class="cab-stat-value" id="stat-orders">0</span><span class="cab-stat-label">Усього замовлень</span></div>
+                    <div class="cab-stat"><span class="cab-stat-value" id="stat-active">0</span><span class="cab-stat-label">У дорозі / в обробці</span></div>
+                    <div class="cab-stat"><span class="cab-stat-value" id="stat-spent">0 ₴</span><span class="cab-stat-label">Загальна сума покупок</span></div>
+                    <div class="cab-stat"><span class="cab-stat-value" id="stat-reviews">0</span><span class="cab-stat-label">Залишено відгуків</span></div>
+                </section>
+
+                <!-- Замовлення -->
+                <section class="cab-panel" id="tab-orders">
+                    <div class="cab-panel-head">
+                        <h1>Мої замовлення</h1>
+                        <div class="cab-tools">
+                            <select id="orders-filter" aria-label="Фільтр за статусом"></select>
+                            <button type="button" class="cab-btn ghost" id="orders-refresh"><i class="fa-solid fa-rotate"></i> Оновити</button>
+                        </div>
+                    </div>
+                    <div id="orders-list" aria-live="polite"></div>
+                </section>
+
+                <!-- Особисті дані -->
+                <section class="cab-panel" id="tab-profile" hidden>
+                    <div class="cab-panel-head"><h1>Особисті дані</h1></div>
+                    <form id="profile-form" class="cab-form" novalidate>
+                        <div class="form-group">
+                            <label for="profile-name">Ім’я</label>
+                            <input type="text" id="profile-name" maxlength="50" autocomplete="name">
+                            <small class="field-error" id="profile-name-error" role="alert"></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-email">Електронна пошта</label>
+                            <input type="email" id="profile-email" readonly>
+                            <small class="cab-hint">Пошту змінити не можна: вона використовується для входу.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="profile-since">Акаунт створено</label>
+                            <input type="text" id="profile-since" readonly>
+                        </div>
+                        <p class="form-message" id="profile-message" role="status"></p>
+                        <button type="submit" class="cab-btn">Зберегти зміни</button>
+                    </form>
+                </section>
+
+                <!-- Безпека -->
+                <section class="cab-panel" id="tab-security" hidden>
+                    <div class="cab-panel-head"><h1>Зміна пароля</h1></div>
+                    <form id="password-form" class="cab-form" novalidate>
+                        <div class="form-group">
+                            <label for="pw-current">Поточний пароль</label>
+                            <div class="password-field">
+                                <input type="password" id="pw-current" autocomplete="current-password" maxlength="128">
+                                <button type="button" class="password-toggle" data-target="pw-current" aria-label="Показати пароль" aria-pressed="false"><i class="fa-regular fa-eye"></i></button>
+                            </div>
+                            <small class="field-error" id="pw-current-error" role="alert"></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pw-new">Новий пароль</label>
+                            <div class="password-field">
+                                <input type="password" id="pw-new" autocomplete="new-password" maxlength="128">
+                                <button type="button" class="password-toggle" data-target="pw-new" aria-label="Показати пароль" aria-pressed="false"><i class="fa-regular fa-eye"></i></button>
+                            </div>
+                            <ul class="password-rules" id="pw-rules">
+                                <li data-rule="length">Щонайменше 8 символів</li>
+                                <li data-rule="letter">Містить літеру</li>
+                                <li data-rule="digit">Містить цифру</li>
+                            </ul>
+                            <small class="field-error" id="pw-new-error" role="alert"></small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pw-repeat">Повторіть новий пароль</label>
+                            <div class="password-field">
+                                <input type="password" id="pw-repeat" autocomplete="new-password" maxlength="128">
+                                <button type="button" class="password-toggle" data-target="pw-repeat" aria-label="Показати пароль" aria-pressed="false"><i class="fa-regular fa-eye"></i></button>
+                            </div>
+                            <small class="field-error" id="pw-repeat-error" role="alert"></small>
+                        </div>
+                        <p class="form-message" id="password-message" role="status"></p>
+                        <button type="submit" class="cab-btn">Змінити пароль</button>
+                    </form>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="cabinet.js"></script>
+</body>
+</html>

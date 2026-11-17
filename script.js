@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (activeUser) {
         if (userNameDisplay) userNameDisplay.textContent = activeUser;
-        if (userBtn) userBtn.href = '#';
+        if (userBtn) { userBtn.href = 'cabinet.html'; userBtn.title = 'Особистий кабінет'; }
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
     } else {
         if (userNameDisplay) userNameDisplay.textContent = 'Увійти';

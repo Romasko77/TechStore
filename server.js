@@ -868,6 +868,127 @@ app.delete('/api/admin/reviews/:id', requireAdmin, async (req, res) => {
     } catch (err) { adminError(res, err); }
 });
 
+// === ОСОБИСТИЙ КАБІНЕТ ===
+// Профіль і статистика
+app.get('/api/account/profile', requireUser, async (req, res) => {
+    try {
+        const [userRow, stats, reviews] = await Promise.all([
+            pool.query('SELECT id, name, email, created_at FROM users WHERE id = $1', [req.user.id]),
+            pool.query(
+                `SELECT COUNT(*)::int AS orders_count,
+                        COUNT(*) FILTER (WHERE status = 'new' OR status = 'processing' OR status = 'shipped')::int AS active_count,
+                        COALESCE(SUM(total) FILTER (WHERE status <> 'cancelled'), 0) AS total_spent
+                 FROM orders WHERE user_id = $1`,
+                [req.user.id]
+            ),
+            pool.query('SELECT COUNT(*)::int AS n FROM reviews WHERE author = $1', [req.user.name])
+        ]);
+        res.json({
+            user: userRow.rows[0],
+            stats: {
+                ordersCount: stats.rows[0].orders_count,
+                activeCount: stats.rows[0].active_count,
+                totalSpent: Number(stats.rows[0].total_spent),
+                reviewsCount: reviews.rows[0].n
+            }
+        });
+    } catch (err) {
+        console.error('Помилка профілю:', err.message);
+        res.status(500).json({ error: 'Не вдалося завантажити профіль' });
+    }
+});
+
+// Замовлення поточного користувача (разом зі складом і картинкою товару)
+app.get('/api/account/orders', requireUser, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT o.id, o.full_name, o.phone, o.email, o.city, o.delivery_method, o.address,
+                    o.payment_method, o.total, o.status, o.created_at,
+                    COALESCE(json_agg(json_build_object(
+                        'product_id', i.product_id, 'title', i.title, 'color', i.color,
+                        'memory', i.memory, 'unit_price', i.unit_price, 'quantity', i.quantity,
+                        'image_url', p.image_url
+                    ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
+             FROM orders o
+             LEFT JOIN order_items i ON i.order_id = o.id
+             LEFT JOIN products p ON p.id = i.product_id
+             WHERE o.user_id = $1
+             GROUP BY o.id
+             ORDER BY o.id DESC
+             LIMIT 100`,
+            [req.user.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Помилка отримання замовлень користувача:', err.message);
+        res.status(500).json({ error: 'Не вдалося завантажити замовлення' });
+    }
+});
+
+// Скасування замовлення: лише власного і лише поки воно «Нове»
+app.post('/api/account/orders/:id/cancel', requireUser, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некоректний id' });
+    try {
+        const result = await pool.query(
+            `UPDATE orders SET status = 'cancelled'
+             WHERE id = $1 AND user_id = $2 AND status = 'new'
+             RETURNING id, status`,
+            [id, req.user.id]
+        );
+        if (!result.rows.length) {
+            const exists = await pool.query('SELECT status FROM orders WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+            if (!exists.rows.length) return res.status(404).json({ error: 'Замовлення не знайдено' });
+            return res.status(409).json({ error: 'Це замовлення вже в обробці, скасувати його можна лише через менеджера' });
+        }
+        res.json(result.rows[0]);
+        if (adminChatId && TELEGRAM_BOT_TOKEN) {
+            telegramRequest('sendMessage', {
+                chat_id: adminChatId,
+                text: `❌ Клієнт ${req.user.name} скасував замовлення №${id}`
+            }).catch(e => console.error('Telegram:', e.message));
+        }
+    } catch (err) {
+        console.error('Помилка скасування замовлення:', err.message);
+        res.status(500).json({ error: 'Не вдалося скасувати замовлення' });
+    }
+});
+
+// Зміна імені
+app.patch('/api/account/profile', rateLimit('profile', 20, 60 * 60 * 1000), requireUser, async (req, res) => {
+    const name = String(req.body?.name ?? '').trim().replace(/\s+/g, ' ');
+    const problem = validateName(name);
+    if (problem) return res.status(400).json({ error: problem });
+    try {
+        const result = await pool.query('UPDATE users SET name = $1 WHERE id = $2 RETURNING id, name, email', [name, req.user.id]);
+        res.json({ user: result.rows[0] });
+    } catch (err) {
+        console.error('Помилка оновлення профілю:', err.message);
+        res.status(500).json({ error: 'Не вдалося зберегти зміни' });
+    }
+});
+
+// Зміна пароля
+app.post('/api/account/password', rateLimit('password', 8, 60 * 60 * 1000), requireUser, async (req, res) => {
+    const current = String(req.body?.currentPassword ?? '');
+    const next = String(req.body?.newPassword ?? '');
+    if (!current) return res.status(400).json({ error: 'Введіть поточний пароль' });
+    const problem = validatePassword(next);
+    if (problem) return res.status(400).json({ error: problem });
+    if (current === next) return res.status(400).json({ error: 'Новий пароль має відрізнятися від поточного' });
+    try {
+        const row = (await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id])).rows[0];
+        if (!row || !(await verifyPassword(current, row.password_hash))) {
+            return res.status(403).json({ error: 'Поточний пароль введено невірно' });
+        }
+        await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [await hashPassword(next), req.user.id]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Помилка зміни пароля:', err.message);
+        res.status(500).json({ error: 'Не вдалося змінити пароль' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Сервер успішно запущено на порту ${PORT}`);
