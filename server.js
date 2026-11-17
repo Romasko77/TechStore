@@ -280,9 +280,15 @@ async function sendToTelegramAdmin(userId, userName, text) {
     });
 }
 
-// Запасні моделі: якщо перша перевантажена (503) або не відповідає, пробуємо наступну
-const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
-const MODEL_TIMEOUT_MS = 12000; // максимум очікування однієї моделі
+// Запасні моделі: якщо перша перевантажена (503) або не відповідає, пробуємо наступну.
+// Останній варіант - легша модель, яка зазвичай менш завантажена. Список можна змінити
+// без правки коду: змінна середовища GEMINI_FALLBACK_MODELS (через кому) на Render.
+const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.6-flash,gemini-3.5-flash,gemini-flash-lite-latest')
+    .split(',').map(m => m.trim()).filter(Boolean);
+const MODEL_TIMEOUT_MS = 12000;   // максимум очікування однієї спроби
+const MODEL_ATTEMPTS = 2;         // спроб на одну модель при тимчасових помилках
+const RETRY_DELAY_MS = 1500;      // пауза між спробами
+const TOTAL_BUDGET_MS = 35000;    // загальний ліміт часу на всі спроби
 
 function withTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
@@ -294,15 +300,31 @@ function withTimeout(promise, ms) {
     });
 }
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Тимчасова помилка (перевантаження, ліміти, мережа): має сенс повторити
+function isTemporaryError(err) {
+    const status = Number(err?.status ?? err?.code);
+    const message = String(err?.message || '');
+    return [429, 500, 502, 503, 504].includes(status)
+        || /UNAVAILABLE|high demand|overloaded|RESOURCE_EXHAUSTED|timeout|fetch failed|ECONNRESET/i.test(message);
+}
+
 async function generateWithRetry(ai, model, contents, config) {
     const models = [model, ...FALLBACK_MODELS.filter(m => m !== model)];
+    const startedAt = Date.now();
     let lastError;
     for (const m of models) {
-        try {
-            return await withTimeout(ai.models.generateContent({ model: m, contents, config }), MODEL_TIMEOUT_MS);
-        } catch (err) {
-            lastError = err;
-            console.log(`⚠️ Модель ${m} не відповіла (${String(err.message).slice(0, 80)}). Пробуємо наступну...`);
+        for (let attempt = 1; attempt <= MODEL_ATTEMPTS; attempt++) {
+            if (Date.now() - startedAt > TOTAL_BUDGET_MS) throw lastError || new Error('timeout');
+            try {
+                return await withTimeout(ai.models.generateContent({ model: m, contents, config }), MODEL_TIMEOUT_MS);
+            } catch (err) {
+                lastError = err;
+                console.log(`⚠️ Модель ${m}, спроба ${attempt}/${MODEL_ATTEMPTS}: ${String(err.message).slice(0, 80)}`);
+                if (!isTemporaryError(err)) break;                  // не тимчасова помилка (наприклад, моделі немає) - одразу до наступної моделі
+                if (attempt < MODEL_ATTEMPTS) await sleep(RETRY_DELAY_MS);
+            }
         }
     }
     throw lastError;
